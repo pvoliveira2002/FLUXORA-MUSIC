@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Sessões, cookies e configurações locais
+.env
+.env.*
+!.env.example
+*cookies*.txt
+*cookie*.txt
+config.json
+config-qt.json
+biblioteca-qt.json
+
+# Downloads e artefatos de execução/empacotamento
+Downloads/
+downloads/
+*.part
+*.ytdl
+*.log
+build/
+dist/
+*.spec
