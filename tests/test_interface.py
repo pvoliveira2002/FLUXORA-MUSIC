@@ -2,7 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from PySide6.QtCore import Qt
@@ -167,6 +167,25 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(len(self.window.pending_downloads),2)
         self.assertEqual(sum(card.state=='Baixando' for card in self.window.download_cards),3)
         self.assertEqual(sum(card.state=='Na fila' for card in self.window.download_cards),2)
+
+    def test_tray_notifies_once_only_after_the_whole_queue_finishes(self):
+        if self.window.tray: self.window.tray.hide()
+        self.window.tray=MagicMock()
+        with patch.object(self.window,'_process_download_queue'):
+            self.window._launch_download('https://example.com/one','MP3','320 kbps',False,None,'Faixa 1')
+            self.window._launch_download('https://example.com/two','MP3','320 kbps',False,None,'Faixa 2')
+        jobs=list(self.window.pending_downloads); self.window.pending_downloads.clear()
+        workers=[MagicMock(),MagicMock()]
+        for job,worker in zip(jobs,workers): self.window.active_downloads[job['card']]=worker
+        for job in jobs:
+            self.window._finished_download(job['card'],{'files':[],'url':job['url'],'thumbnail':'','count':1})
+        self.window.tray.showMessage.assert_not_called()
+        self.window._worker_stopped(jobs[0]['card'],workers[0],jobs[0]['key'])
+        self.window.tray.showMessage.assert_not_called()
+        self.window._worker_stopped(jobs[1]['card'],workers[1],jobs[1]['key'])
+        self.window.tray.showMessage.assert_called_once()
+        self.assertIn('2 concluído(s)',self.window.tray.showMessage.call_args.args[1])
+        self.assertFalse(self.window.download_batch_active)
 
     def test_playlist_creates_one_queue_item_per_track(self):
         self.window.change_type('MP3')

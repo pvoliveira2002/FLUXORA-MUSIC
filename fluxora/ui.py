@@ -318,6 +318,8 @@ class FluxoraWindow(QMainWindow):
         self.active_analyzer=None
         self.max_parallel_downloads=3
         self.active_downloads={}; self.pending_downloads=[]; self.queued_download_keys=set()
+        self.download_batch_active=False
+        self.download_batch_completed=0; self.download_batch_failed=0; self.download_batch_cancelled=0
         self.shutting_down=False
         self.download_cards=[]; self.fetchers=[]; self.images={}; self.image_waiters={}; self.analyzed_info=None
         self.playlist_covers={}; self.playlist_thumbs_loaded=set()
@@ -854,6 +856,9 @@ class FluxoraWindow(QMainWindow):
         selected_tuple=tuple(selected or ())
         job_key=(url,media,quality,playlist,selected_tuple)
         if job_key in self.queued_download_keys: return False
+        if not self.download_batch_active:
+            self.download_batch_active=True
+            self.download_batch_completed=0; self.download_batch_failed=0; self.download_batch_cancelled=0
         self.queued_download_keys.add(job_key)
         fallback=(self.analyzed_info.get('title') if self.analyzed_info and self.analyzed_info.get('url')==url else 'Novo download')
         card=None
@@ -900,17 +905,18 @@ class FluxoraWindow(QMainWindow):
     def _finished_download(self,card,result):
         count=self.storage.add_files(result.get('files',[]),result.get('url',''),result.get('thumbnail',''))
         card.finalize('Concluído', f'{result.get("count",0)} arquivo(s) processado(s) • Concluído')
+        self.download_batch_completed += 1
         self.status('Download concluído' if count else 'Download concluído — consulte a pasta de destino')
-        if self.tray: self.tray.showMessage('Fluxora','Download concluído.',QSystemTrayIcon.MessageIcon.Information,2800)
         self._refresh_library(); self.set_filter(self.filter_state)
 
     def _failed_download(self,card,error):
         summary=(error.splitlines()[0] if error else 'Falha no download')[:180]
         card.finalize('Falhou',summary); card.detail.setToolTip(error)
+        self.download_batch_failed += 1
         self.status('Falha no download'); self.set_filter(self.filter_state)
-        if self.tray: self.tray.showMessage('Fluxora','Um download falhou. Consulte a aba Falhou.',QSystemTrayIcon.MessageIcon.Warning,3200)
 
     def _cancelled_download(self,card):
+        self.download_batch_cancelled += 1
         card.finalize('Cancelado','Transferência cancelada'); self.status('Download cancelado'); self.set_filter(self.filter_state)
 
     def _worker_stopped(self,card,worker,job_key):
@@ -921,6 +927,23 @@ class FluxoraWindow(QMainWindow):
                      for i in range(self.playlist_table.rowCount()))
         self.pl_download.setEnabled(selected)
         self.set_filter(self.filter_state); self._refresh_space(); self._process_download_queue()
+        self._notify_download_queue_finished()
+
+    def _notify_download_queue_finished(self):
+        if (not self.download_batch_active or self.active_downloads or self.pending_downloads
+                or self.shutting_down):
+            return
+        completed=self.download_batch_completed; failed=self.download_batch_failed; cancelled=self.download_batch_cancelled
+        parts=[]
+        if completed: parts.append(f'{completed} concluído(s)')
+        if failed: parts.append(f'{failed} com falha')
+        if cancelled: parts.append(f'{cancelled} cancelado(s)')
+        message='Fila finalizada: '+(', '.join(parts) if parts else 'nenhum download processado')+'.'
+        if self.tray:
+            severity=QSystemTrayIcon.MessageIcon.Warning if failed else QSystemTrayIcon.MessageIcon.Information
+            self.tray.showMessage('Fluxora',message,severity,3500)
+        self.status(message)
+        self.download_batch_active=False
 
     def _cancel_download_card(self,card):
         worker=self.active_downloads.get(card)
@@ -930,8 +953,9 @@ class FluxoraWindow(QMainWindow):
         for position,job in enumerate(self.pending_downloads):
             if job['card'] is card:
                 self.pending_downloads.pop(position); self.queued_download_keys.discard(job['key'])
+                self.download_batch_cancelled += 1
                 card.finalize('Cancelado','Removido da fila antes de iniciar')
-                self.set_filter(self.filter_state); return
+                self.set_filter(self.filter_state); self._notify_download_queue_finished(); return
 
     def _remove_download_card(self,card):
         if card in self.active_downloads or card.state in ('Na fila','Baixando'): return
