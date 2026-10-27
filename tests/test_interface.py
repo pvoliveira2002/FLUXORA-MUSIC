@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from PySide6.QtWidgets import QApplication
@@ -42,6 +43,36 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(self.window.pl_download.isEnabled())
         self.window.select_playlist(False)
         self.assertFalse(self.window.pl_download.isEnabled())
+
+    def test_audio_choice_survives_video_analysis(self):
+        self.window.change_type('MP3')
+        self.window._analyzed({
+            'kind':'video', 'url':'https://example.com/video', 'title':'Vídeo',
+            'channel':'Canal', 'duration':60, 'view_count':1, 'thumbnail':'',
+            'heights':[1080], 'video_formats':{1080:{'width':1920}},
+        })
+        self.assertEqual(self.window.preview_media,'Áudio')
+        self.assertEqual(self.window.preview_quality,'320 kbps')
+        self.assertTrue(self.window.format_combo.currentText().startswith('MP3'))
+
+    def test_audio_choice_survives_playlist_analysis(self):
+        self.window.change_type('MP3')
+        self.window._analyzed({
+            'kind':'playlist', 'url':'https://example.com/playlist?list=1',
+            'title':'Playlist', 'channel':'Canal', 'count':1, 'thumbnail':'',
+            'entries':[{'index':1,'title':'Faixa','duration':60,'thumbnail':''}],
+        })
+        self.assertEqual(self.window.pl_media.currentText(),'MP3')
+        self.assertEqual(self.window.pl_quality.currentText(),'320 kbps')
+
+    def test_direct_audio_download_launches_as_mp3(self):
+        self.window.url_entry.setText('https://example.com/video')
+        self.window.change_type('MP3')
+        with patch.object(self.window,'_launch_download') as launch:
+            self.window.start_download()
+        launch.assert_called_once_with(
+            'https://example.com/video','MP3','320 kbps',False,None
+        )
 
 
 if __name__=='__main__': unittest.main()

@@ -502,6 +502,9 @@ class FluxoraWindow(QMainWindow):
             self.status('Cole a URL da playlist e clique em Analisar para escolher os itens.')
         self.mode=media
 
+    def _selected_media_type(self):
+        return 'MP3' if self.format_combo.currentText().startswith('MP3') else 'MP4'
+
     def _quality_changed(self,_val):
         current='MP3' if self.format_combo.currentText().startswith('MP3') else 'MP4'
         desired=self.quality_combo.currentText()
@@ -537,6 +540,7 @@ class FluxoraWindow(QMainWindow):
     def set_preview_media(self,media):
         for b in self.preview_media_chips: b.setChecked(b.text()==media)
         self.preview_media=media
+        self.format_combo.setCurrentText('MP3 (áudio)' if media=='Áudio' else 'MP4 (vídeo)')
         self._clear_layout(self.preview_qualities)
         all_heights=(self.analyzed_info or {}).get('heights') or []
         if media=='Vídeo':
@@ -571,6 +575,7 @@ class FluxoraWindow(QMainWindow):
             b.setChecked(q==quality); b.setText(self._preview_option_label(q,q==quality))
 
     def _playlist_quality_change(self,value):
+        self.format_combo.setCurrentText('MP3 (áudio)' if value=='MP3' else 'MP4 (vídeo)')
         self.pl_quality.clear(); self.pl_quality.addItems(AUDIO_QUALITIES if value=='MP3' else VIDEO_QUALITIES)
 
     def analyze(self):
@@ -595,15 +600,17 @@ class FluxoraWindow(QMainWindow):
     def _analyzed(self,info):
         self.analyzed_info=info
         self.status('Análise concluída')
+        requested_media=self._selected_media_type()
         if info['kind']=='video':
             self.preview_title.setText(info['title'])
             self.preview_channel.setText(info['channel'])
             views=info.get('view_count')
             self.preview_metadata.setText(f'{duration(info.get("duration"))}  •  '+(f'{views:,} visualizações' if views is not None else 'Qualidade disponível após análise'))
-            self.set_preview_media('Vídeo')
+            self.set_preview_media('Áudio' if requested_media=='MP3' else 'Vídeo')
             self._show_page(1)
             self._request_image(info.get('thumbnail'),self.preview_cover)
         else:
+            self.pl_media.setCurrentText(requested_media)
             self.playlist_title.setText(info['title'])
             count=info.get('count') or len(info.get('entries') or [])
             self.playlist_meta.setText(f'{info.get("channel") or "Playlist"}  •  {count} vídeos')
@@ -684,7 +691,7 @@ class FluxoraWindow(QMainWindow):
         if self.pages.currentIndex()==1 and self.analyzed_info and self.analyzed_info.get('kind')=='video' and self.analyzed_info['url']==url:
             media='MP3' if self.preview_media=='Áudio' else 'MP4'; quality=self.preview_quality
         else:
-            media='MP3' if self.format_combo.currentText().startswith('MP3') else 'MP4'; quality=self.quality_combo.currentText()
+            media=self._selected_media_type(); quality=self.quality_combo.currentText()
         self._launch_download(url,media,quality,False,None)
 
     def _launch_download(self,url,media,quality,playlist,selected):
