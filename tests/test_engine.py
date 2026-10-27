@@ -1,7 +1,8 @@
 """Validação das opções do motor sem acessar a rede."""
 import tempfile
 import unittest
-from fluxora.engine import DownloadCancelled, Downloader, is_playlist_url, is_valid_url, yt_options
+from fluxora.engine import (DownloadCancelled, Downloader, is_playlist_url,
+                            is_valid_url, thumbnail_url, yt_options)
 
 
 class EngineTests(unittest.TestCase):
@@ -41,6 +42,25 @@ class EngineTests(unittest.TestCase):
             worker.cancel()
             with self.assertRaises(DownloadCancelled):
                 worker.post_hook({'status':'started','info_dict':{}})
+
+    def test_thumbnail_uses_best_flat_playlist_image(self):
+        info={'id':'abc123xyz', 'thumbnails':[
+            {'url':'https://img/small.jpg','width':120,'height':90},
+            {'url':'https://img/large.jpg','width':480,'height':360},
+        ]}
+        self.assertEqual(thumbnail_url(info),'https://img/large.jpg')
+
+    def test_thumbnail_has_youtube_id_fallback(self):
+        self.assertEqual(
+            thumbnail_url({'id':'x-_CkcA3u_c','ie_key':'Youtube'}),
+            'https://i.ytimg.com/vi/x-_CkcA3u_c/hqdefault.jpg'
+        )
+
+    def test_thumbnail_does_not_treat_playlist_id_as_video(self):
+        self.assertEqual(
+            thumbnail_url({'id':'RDx-_CkcA3u_c','ie_key':'YoutubeTab','_type':'playlist'}),
+            ''
+        )
 
 
 if __name__=='__main__': unittest.main()

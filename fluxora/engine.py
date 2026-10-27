@@ -41,6 +41,24 @@ def format_bytes(count):
     return f'{count:.1f} PB'
 
 
+def thumbnail_url(info):
+    """Retorna a melhor miniatura disponível em metadados normais ou flat."""
+    if not isinstance(info,dict): return ''
+    if info.get('thumbnail'): return str(info['thumbnail'])
+    candidates=[item for item in (info.get('thumbnails') or [])
+                if isinstance(item,dict) and item.get('url')]
+    if candidates:
+        def score(item):
+            width=int(item.get('width') or 0); height=int(item.get('height') or 0)
+            return (width*height,width,height)
+        return str(max(candidates,key=score)['url'])
+    video_id=str(info.get('id') or '')
+    if re.fullmatch(r'[A-Za-z0-9_-]{6,}',video_id):
+        extractor=str(info.get('extractor_key') or info.get('ie_key') or '').lower()
+        if extractor=='youtube': return f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+    return ''
+
+
 def yt_options(output, media_type='MP4', quality='Melhor disponível', browser=None,
                cookie_file=None, playlist=False, playlist_limit=0, selected=None,
                progress_hook=None, post_hook=None):
@@ -123,14 +141,14 @@ class Analyzer(QThread):
                     entries.append({'index': int(item.get('playlist_index') or number),
                                     'title': item.get('title') or f'Vídeo {number}',
                                     'duration': item.get('duration'),
-                                    'thumbnail': item.get('thumbnail', ''),
+                                    'thumbnail': thumbnail_url(item),
                                     'url': item.get('webpage_url') or item.get('url', '')})
                 self.analyzed.emit({'kind': 'playlist', 'url': self.url,
                                     'title': info.get('title', 'Playlist'),
                                     'channel': info.get('uploader', ''),
                                     'count': info.get('playlist_count') or info.get('n_entries'),
                                     'entries': entries,
-                                    'thumbnail': info.get('thumbnail','')})
+                                    'thumbnail': thumbnail_url(info)})
             else:
                 formats = info.get('formats', [])
                 heights = sorted({int(f.get('height')) for f in formats
@@ -148,7 +166,7 @@ class Analyzer(QThread):
                                     'channel': info.get('uploader') or info.get('channel') or '',
                                     'duration': info.get('duration'),
                                     'view_count': info.get('view_count'),
-                                    'thumbnail': info.get('thumbnail') or '',
+                                    'thumbnail': thumbnail_url(info),
                                     'heights': heights, 'video_formats': video_formats})
         except Exception as exc:
             self.failed.emit(str(exc).replace('ERROR: ', '').strip())
@@ -180,7 +198,7 @@ class Downloader(QThread):
     def hook(self, data):
         if self.stop_flag.is_set(): raise DownloadCancelled()
         info = data.get('info_dict') or {}
-        thumb = info.get('thumbnail') or ''
+        thumb = thumbnail_url(info)
         if thumb and thumb != self.seen_thumbnail:
             self.seen_thumbnail = thumb
             self.thumbnail.emit(thumb)

@@ -212,7 +212,7 @@ class FluxoraWindow(QMainWindow):
         self.max_parallel_downloads=3
         self.active_downloads={}; self.pending_downloads=[]; self.queued_download_keys=set()
         self.shutting_down=False
-        self.download_cards=[]; self.fetchers=[]; self.images={}; self.analyzed_info=None
+        self.download_cards=[]; self.fetchers=[]; self.images={}; self.image_waiters={}; self.analyzed_info=None
         self.playlist_covers={}; self.playlist_thumbs_loaded=set()
         self.filter_state='Todos'; self.library_filter='video'
         self.library_columns=0
@@ -816,14 +816,27 @@ class FluxoraWindow(QMainWindow):
 
     def _request_image(self,url,cover):
         if not url: return
-        if url in self.images: cover.set_image(self.images[url]); return
+        if url in self.images:
+            try: cover.set_image(self.images[url])
+            except RuntimeError: pass
+            return
+        if url in self.image_waiters:
+            if cover not in self.image_waiters[url]: self.image_waiters[url].append(cover)
+            return
+        self.image_waiters[url]=[cover]
         fetch=ImageFetcher(url,self)
         # reter referência até a thread terminar
         self.fetchers.append(fetch)
         def on_loaded(_url,data):
-            self.images[_url]=data; cover.set_image(data)
+            self.images[_url]=data
+            for target in self.image_waiters.get(_url,[]):
+                try: target.set_image(data)
+                except RuntimeError: pass
         fetch.loaded.connect(on_loaded)
-        fetch.finished.connect(lambda:self.fetchers.remove(fetch) if fetch in self.fetchers else None)
+        def on_finished():
+            self.image_waiters.pop(url,None)
+            if fetch in self.fetchers: self.fetchers.remove(fetch)
+        fetch.finished.connect(on_finished)
         fetch.start()
 
     def set_library_filter(self,media):
