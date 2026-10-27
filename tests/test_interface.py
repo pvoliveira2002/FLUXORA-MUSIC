@@ -74,5 +74,65 @@ class InterfaceTests(unittest.TestCase):
             'https://example.com/video','MP3','320 kbps',False,None
         )
 
+    def test_queue_starts_at_most_three_individual_downloads(self):
+        def fake_start(job):
+            job['card'].start()
+            self.window.active_downloads[job['card']]=object()
+        with patch.object(self.window,'_start_download_job',side_effect=fake_start):
+            for number in range(5):
+                self.window._launch_download(
+                    f'https://example.com/video/{number}','MP3','320 kbps',False,None,
+                    f'Faixa {number}'
+                )
+        self.assertEqual(len(self.window.active_downloads),3)
+        self.assertEqual(len(self.window.pending_downloads),2)
+        self.assertEqual(sum(card.state=='Baixando' for card in self.window.download_cards),3)
+        self.assertEqual(sum(card.state=='Na fila' for card in self.window.download_cards),2)
+
+    def test_playlist_creates_one_queue_item_per_track(self):
+        self.window.change_type('MP3')
+        self.window._analyzed({
+            'kind':'playlist', 'url':'https://example.com/playlist?list=1',
+            'title':'Playlist', 'channel':'Canal', 'count':2, 'thumbnail':'',
+            'entries':[{'index':1,'title':'Faixa 1','duration':60,'thumbnail':''},
+                       {'index':2,'title':'Faixa 2','duration':90,'thumbnail':''}],
+        })
+        with patch.object(self.window,'_process_download_queue'):
+            self.window.start_playlist_download()
+        self.assertEqual(len(self.window.pending_downloads),2)
+        self.assertEqual([job['selected'] for job in self.window.pending_downloads],[[1],[2]])
+        self.assertEqual([job['card'].title for job in self.window.pending_downloads],['Faixa 1','Faixa 2'])
+
+    def test_cancelled_failed_and_completed_filters_update_and_remove(self):
+        with patch.object(self.window,'_process_download_queue'):
+            self.window._launch_download('https://example.com/one','MP3','320 kbps',False,None,'Cancelada')
+            cancelled=self.window.download_cards[0]
+            self.window._cancel_download_card(cancelled)
+            self.assertEqual(cancelled.state,'Cancelado')
+            self.assertIn('Cancelados (1)',self.window.filter_buttons['Cancelados'].text())
+
+            self.window._launch_download('https://example.com/two','MP3','320 kbps',False,None,'Falha')
+            failed=self.window.download_cards[0]
+            self.window._failed_download(failed,'Erro de teste detalhado')
+            self.assertEqual(failed.state,'Falhou')
+            self.assertIn('Falhou (1)',self.window.filter_buttons['Falhou'].text())
+
+            self.window._launch_download('https://example.com/three','MP3','320 kbps',False,None,'Concluída')
+            completed=self.window.download_cards[0]
+            self.window._finished_download(completed,{'files':[],'url':'','thumbnail':'','count':1})
+            self.assertEqual(completed.state,'Concluído')
+            self.assertIn('Concluídos (1)',self.window.filter_buttons['Concluídos'].text())
+
+        self.assertFalse(self.window.filter_buttons['Pausados'].isEnabled())
+        for filter_name in ('Todos','Na fila','Baixando','Concluídos','Cancelados','Falhou'):
+            self.window.filter_buttons[filter_name].click(); self.app.processEvents()
+            self.assertEqual(self.window.filter_state,filter_name)
+        self.window.filter_buttons['Cancelados'].click(); self.app.processEvents()
+        self.assertFalse(cancelled.isHidden())
+        self.assertTrue(failed.isHidden()); self.assertTrue(completed.isHidden())
+        self.window._remove_download_card(cancelled)
+        self.assertNotIn(cancelled,self.window.download_cards)
+        self.assertIn('Cancelados (0)',self.window.filter_buttons['Cancelados'].text())
+
 
 if __name__=='__main__': unittest.main()

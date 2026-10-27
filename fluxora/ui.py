@@ -86,11 +86,11 @@ class Cover(QLabel):
 
 
 class DownloadCard(QFrame):
-    """Uma tarefa de download; o motor original processa uma tarefa por vez."""
-    def __init__(self, title, media, quality, cancel=None):
+    """Uma tarefa visível durante toda a sessão do aplicativo."""
+    def __init__(self, title, media, quality, cancel=None, remove=None):
         super().__init__(); self.setObjectName('Card')
         self.setMinimumHeight(112)
-        self.state = 'Baixando'; self.title = title
+        self.state = 'Na fila'; self.title = title
         outer=row((11,10,11,10),12); self.setLayout(outer)
         self.cover=Cover(144,84); outer.addWidget(self.cover)
         middle=column(spacing=5); outer.addLayout(middle,1)
@@ -104,15 +104,23 @@ class DownloadCard(QFrame):
         self.progress_animation=QPropertyAnimation(self.progress,b'value',self)
         self.progress_animation.setDuration(220)
         self.progress_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.detail=text('Preparando download...','Muted'); middle.addWidget(self.detail)
+        self.detail=text('Aguardando na fila...','Muted'); middle.addWidget(self.detail)
         controls=column(spacing=8); controls.addStretch(1)
         self.percent=text('0%','Success'); self.percent.setAlignment(Qt.AlignmentFlag.AlignRight); controls.addWidget(self.percent)
         self.cancel_btn=push('','close', 'IconButton'); self.cancel_btn.setToolTip('Cancelar download')
         if cancel: self.cancel_btn.clicked.connect(cancel)
         else: self.cancel_btn.setEnabled(False)
         controls.addWidget(self.cancel_btn)
+        self.remove_btn=push('','close','IconButton'); self.remove_btn.setToolTip('Remover da lista desta sessão')
+        if remove: self.remove_btn.clicked.connect(remove)
+        else: self.remove_btn.setEnabled(False)
+        self.remove_btn.setVisible(False); controls.addWidget(self.remove_btn)
         controls.addStretch(1)
         outer.addLayout(controls)
+
+    def start(self):
+        self.state='Baixando'; self.detail.setText('Preparando download...')
+        self.cancel_btn.setEnabled(True)
 
     def update_progress(self,data):
         self.state='Baixando'
@@ -132,13 +140,14 @@ class DownloadCard(QFrame):
     def finalize(self, state, message=''):
         self.state=state
         self.progress_animation.stop()
-        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False); self.cancel_btn.setVisible(False)
+        self.remove_btn.setVisible(True); self.remove_btn.setEnabled(True)
         self.detail.setText(message or state)
         if state=='Concluído':
             self.progress.setValue(100); self.percent.setText('✓')
             self.percent.setStyleSheet(f'color:{GREEN}; font-size:19px; font-weight:700;')
         elif state=='Falhou': self.percent.setText('!'); self.percent.setStyleSheet(f'color:{RED}; font-weight:800;')
-        elif state=='Cancelado': self.percent.setText('—')
+        elif state=='Cancelado': self.percent.setText('×'); self.percent.setStyleSheet(f'color:{MUTED}; font-weight:800;')
 
 
 class SettingsDialog(QDialog):
@@ -199,7 +208,10 @@ class FluxoraWindow(QMainWindow):
         super().__init__(); self.setWindowTitle('Fluxora 3.0 | Media Downloader')
         self.resize(1330,825); self.setMinimumSize(1050,670)
         self.storage=Storage()
-        self.active_worker=None; self.active_analyzer=None; self.active_card=None
+        self.active_analyzer=None
+        self.max_parallel_downloads=3
+        self.active_downloads={}; self.pending_downloads=[]; self.queued_download_keys=set()
+        self.shutting_down=False
         self.download_cards=[]; self.fetchers=[]; self.images={}; self.analyzed_info=None
         self.playlist_covers={}; self.playlist_thumbs_loaded=set()
         self.filter_state='Todos'; self.library_filter='video'
@@ -289,7 +301,7 @@ class FluxoraWindow(QMainWindow):
         self.current_folder=push('Abrir pasta','folder'); self.current_folder.clicked.connect(self.open_folder)
         top.addWidget(self.current_folder); v.addLayout(top)
         filters=row(spacing=7); self.filter_buttons={}
-        for title in ['Todos','Baixando','Concluídos','Pausados','Falhou']:
+        for title in ['Todos','Na fila','Baixando','Concluídos','Cancelados','Pausados','Falhou']:
             b=push(title,'','Chip'); b.setCheckable(True)
             if title=='Pausados': b.setEnabled(False); b.setToolTip('Pausar downloads ainda não é suportado pelo motor atual')
             else: b.clicked.connect(lambda checked=False, t=title: self.set_filter(t))
@@ -438,11 +450,17 @@ class FluxoraWindow(QMainWindow):
         if self.active_analyzer and self.active_analyzer.isRunning():
             QMessageBox.information(self,'Análise em andamento','Aguarde a análise terminar antes de encerrar o Fluxora.')
             return
-        if self.active_worker and self.active_worker.isRunning():
-            self.active_worker.cancel()
-            if not self.active_worker.wait(2500):
-                QMessageBox.information(self,'Download em andamento','O download ainda está finalizando. Cancele ou aguarde antes de encerrar.')
-                return
+        self.shutting_down=True
+        for job in self.pending_downloads:
+            job['card'].finalize('Cancelado','Aplicativo encerrado antes de iniciar')
+            self.queued_download_keys.discard(job['key'])
+        self.pending_downloads.clear()
+        running=[worker for worker in self.active_downloads.values() if worker.isRunning()]
+        for worker in running: worker.cancel()
+        if any(not worker.wait(2500) for worker in running):
+            self.shutting_down=False
+            QMessageBox.information(self,'Downloads em andamento','Alguns downloads ainda estão finalizando. Aguarde antes de encerrar.')
+            return
         QApplication.instance().quit()
     def closeEvent(self,event:QCloseEvent):
         if self.tray and self.storage.config.get('close_to_tray',True):
@@ -452,8 +470,8 @@ class FluxoraWindow(QMainWindow):
             if self.active_analyzer and self.active_analyzer.isRunning():
                 QMessageBox.information(self,'Análise em andamento','Aguarde a análise terminar antes de fechar o Fluxora.')
                 event.ignore(); return
-            if self.active_worker and self.active_worker.isRunning():
-                QMessageBox.information(self,'Download em andamento','Cancele o download antes de fechar o Fluxora.')
+            if self.active_downloads or self.pending_downloads:
+                QMessageBox.information(self,'Downloads em andamento','Cancele ou aguarde a fila terminar antes de fechar o Fluxora.')
                 event.ignore(); return
             event.accept(); QApplication.instance().quit()
 
@@ -520,10 +538,12 @@ class FluxoraWindow(QMainWindow):
         self.filter_state=name
         counts = {
             'Todos': len(self.download_cards),
+            'Na fila': sum(x.state=='Na fila' for x in self.download_cards),
             'Baixando': sum(x.state=='Baixando' for x in self.download_cards),
             'Concluídos': sum(x.state=='Concluído' for x in self.download_cards),
+            'Cancelados': sum(x.state=='Cancelado' for x in self.download_cards),
             'Pausados': 0,
-            'Falhou': sum(x.state in ('Falhou','Cancelado') for x in self.download_cards),
+            'Falhou': sum(x.state=='Falhou' for x in self.download_cards),
         }
         for key,btn in self.filter_buttons.items():
             btn.setChecked(key==name)
@@ -531,8 +551,10 @@ class FluxoraWindow(QMainWindow):
         number_visible=0
         for card in self.download_cards:
             show=(name=='Todos' or (name=='Baixando' and card.state=='Baixando') or
+                  (name=='Na fila' and card.state=='Na fila') or
                   (name=='Concluídos' and card.state=='Concluído') or
-                  (name=='Falhou' and card.state in ('Falhou','Cancelado')))
+                  (name=='Cancelados' and card.state=='Cancelado') or
+                  (name=='Falhou' and card.state=='Falhou'))
             card.setVisible(show)
             if show: number_visible += 1
         self.empty_downloads.setVisible(number_visible==0)
@@ -673,12 +695,22 @@ class FluxoraWindow(QMainWindow):
     def start_playlist_download(self):
         if not self.analyzed_info or self.analyzed_info.get('kind')!='playlist':
             QMessageBox.information(self,'Playlist','Analise uma playlist antes de baixar.'); return
-        selected=[int(self.playlist_table.item(i,1).data(Qt.ItemDataRole.UserRole))
-                  for i in range(self.playlist_table.rowCount())
-                  if self.playlist_table.item(i,0).checkState()==Qt.CheckState.Checked]
-        if not selected: QMessageBox.information(self,'Playlist','Selecione pelo menos um vídeo.'); return
-        self._launch_download(self.analyzed_info['url'],self.pl_media.currentText(),
-                              self.pl_quality.currentText(),True,selected)
+        selected_rows=[i for i in range(self.playlist_table.rowCount())
+                       if self.playlist_table.item(i,0).checkState()==Qt.CheckState.Checked]
+        if not selected_rows: QMessageBox.information(self,'Playlist','Selecione pelo menos um vídeo.'); return
+        entries={int(item.get('index',position+1)):item
+                 for position,item in enumerate(self.analyzed_info.get('entries',[]))}
+        added=0
+        for table_row in selected_rows:
+            index=int(self.playlist_table.item(table_row,1).data(Qt.ItemDataRole.UserRole))
+            item=entries.get(index,{})
+            if self._launch_download(self.analyzed_info['url'],self.pl_media.currentText(),
+                                     self.pl_quality.currentText(),True,[index],
+                                     item.get('title') or self.playlist_table.item(table_row,3).text(),
+                                     item.get('thumbnail','')):
+                added += 1
+        self._show_page(0)
+        self.status(f'{added} música(s) adicionada(s) à fila' if added else 'Os itens selecionados já estão na fila')
 
     def start_download(self):
         url=self.url_entry.text().strip()
@@ -694,23 +726,43 @@ class FluxoraWindow(QMainWindow):
             media=self._selected_media_type(); quality=self.quality_combo.currentText()
         self._launch_download(url,media,quality,False,None)
 
-    def _launch_download(self,url,media,quality,playlist,selected):
-        if self.active_worker and self.active_worker.isRunning():
-            QMessageBox.information(self,'Download ativo','Existe um download em andamento. Aguarde ou cancele antes de iniciar outro.')
-            return
+    def _launch_download(self,url,media,quality,playlist,selected,title=None,thumbnail=''):
+        selected_tuple=tuple(selected or ())
+        job_key=(url,media,quality,playlist,selected_tuple)
+        if job_key in self.queued_download_keys: return False
+        self.queued_download_keys.add(job_key)
+        fallback=(self.analyzed_info.get('title') if self.analyzed_info and self.analyzed_info.get('url')==url else 'Novo download')
+        card=None
+        card=DownloadCard(title or fallback,media,quality,
+                          cancel=lambda:self._cancel_download_card(card),
+                          remove=lambda:self._remove_download_card(card))
+        if thumbnail: self._request_image(thumbnail,card.cover)
+        self.download_cards.insert(0,card); self.download_list.insertWidget(0,card)
+        self.pending_downloads.append({'key':job_key,'card':card,'url':url,'media':media,
+                                       'quality':quality,'playlist':playlist,'selected':list(selected_tuple) or None})
+        self.set_filter('Todos'); self._show_page(0)
+        self.status('Download adicionado à fila')
+        self._process_download_queue()
+        return True
+
+    def _process_download_queue(self):
+        if self.shutting_down: return
+        while self.pending_downloads and len(self.active_downloads)<self.max_parallel_downloads:
+            job=self.pending_downloads.pop(0)
+            card=job['card']
+            if card.state=='Cancelado':
+                self.queued_download_keys.discard(job['key']); continue
+            self._start_download_job(job)
+
+    def _start_download_job(self,job):
+        card=job['card']; card.start()
         browser=BROWSERS.get(self.storage.config.get('browser','Não usar cookies'))
         cookies=self.storage.config.get('cookie_file') or None
         output=self.storage.config.get('output_dir',str(Path.home()/'Downloads'))
-        worker=Downloader(url,output,media,quality,browser,cookies,playlist,
-                          int(self.storage.config.get('playlist_limit',100)),selected,self)
-        self.active_worker=worker
-        title=(self.analyzed_info.get('title') if self.analyzed_info and self.analyzed_info.get('url')==url else 'Novo download')
-        card=DownloadCard(title,media,quality,worker.cancel)
-        self.download_cards.insert(0,card)
-        self.download_list.insertWidget(0,card)
-        self.active_card=card
-        self.set_filter('Todos'); self._show_page(0)
-        self.download_button.setEnabled(False); self.preview_download.setEnabled(False); self.pl_download.setEnabled(False)
+        worker=Downloader(job['url'],output,job['media'],job['quality'],browser,cookies,job['playlist'],
+                          int(self.storage.config.get('playlist_limit',100)),job['selected'],self)
+        self.active_downloads[card]=worker
+        self.set_filter(self.filter_state)
         self.status('Iniciando transferência...')
         worker.progress.connect(card.update_progress)
         worker.progress.connect(lambda data:self.status(data.get('stage','Baixando...')))
@@ -718,7 +770,7 @@ class FluxoraWindow(QMainWindow):
         worker.completed.connect(lambda data:self._finished_download(card,data))
         worker.failed.connect(lambda message:self._failed_download(card,message))
         worker.cancelled.connect(lambda:self._cancelled_download(card))
-        worker.finished.connect(self._worker_stopped)
+        worker.finished.connect(lambda:self._worker_stopped(card,worker,job['key']))
         worker.start()
 
     def _finished_download(self,card,result):
@@ -729,19 +781,38 @@ class FluxoraWindow(QMainWindow):
         self._refresh_library(); self.set_filter(self.filter_state)
 
     def _failed_download(self,card,error):
-        card.finalize('Falhou','Falha no download')
+        summary=(error.splitlines()[0] if error else 'Falha no download')[:180]
+        card.finalize('Falhou',summary); card.detail.setToolTip(error)
         self.status('Falha no download'); self.set_filter(self.filter_state)
-        QMessageBox.warning(self,'Não foi possível baixar',error)
+        if self.tray: self.tray.showMessage('Fluxora','Um download falhou. Consulte a aba Falhou.',QSystemTrayIcon.MessageIcon.Warning,3200)
 
     def _cancelled_download(self,card):
         card.finalize('Cancelado','Transferência cancelada'); self.status('Download cancelado'); self.set_filter(self.filter_state)
 
-    def _worker_stopped(self):
-        self.download_button.setEnabled(True); self.preview_download.setEnabled(True)
+    def _worker_stopped(self,card,worker,job_key):
+        if self.active_downloads.get(card) is worker: self.active_downloads.pop(card,None)
+        self.queued_download_keys.discard(job_key)
+        worker.deleteLater()
         selected=any(self.playlist_table.item(i,0).checkState()==Qt.CheckState.Checked
                      for i in range(self.playlist_table.rowCount()))
         self.pl_download.setEnabled(selected)
-        self._refresh_space()
+        self.set_filter(self.filter_state); self._refresh_space(); self._process_download_queue()
+
+    def _cancel_download_card(self,card):
+        worker=self.active_downloads.get(card)
+        if worker and worker.isRunning():
+            card.cancel_btn.setEnabled(False); card.detail.setText('Cancelando transferência...')
+            worker.cancel(); return
+        for position,job in enumerate(self.pending_downloads):
+            if job['card'] is card:
+                self.pending_downloads.pop(position); self.queued_download_keys.discard(job['key'])
+                card.finalize('Cancelado','Removido da fila antes de iniciar')
+                self.set_filter(self.filter_state); return
+
+    def _remove_download_card(self,card):
+        if card in self.active_downloads or card.state in ('Na fila','Baixando'): return
+        if card in self.download_cards: self.download_cards.remove(card)
+        self.download_list.removeWidget(card); card.deleteLater(); self.set_filter(self.filter_state)
 
     def _request_image(self,url,cover):
         if not url: return

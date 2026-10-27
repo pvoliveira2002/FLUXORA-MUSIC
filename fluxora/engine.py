@@ -173,6 +173,7 @@ class Downloader(QThread):
         self.playlist, self.playlist_limit, self.selected = playlist, playlist_limit, selected
         self.stop_flag = threading.Event()
         self.seen_thumbnail = ''
+        self.produced_files = set()
 
     def cancel(self): self.stop_flag.set()
 
@@ -188,15 +189,24 @@ class Downloader(QThread):
             received = data.get('downloaded_bytes') or 0
             percent = int(received / total * 100) if total else 0
             idx, count = info.get('playlist_index'), info.get('playlist_count') or info.get('n_entries')
-            full_percent = int(((idx - 1) + percent / 100) * 100 / count) if idx and count else percent
+            full_percent = (percent if self.selected and len(self.selected)==1 else
+                            int(((idx - 1) + percent / 100) * 100 / count) if idx and count else percent)
             self.progress.emit({'percent': min(100, full_percent),
                                 'item_percent': percent,
                                 'title': info.get('title') or 'Mídia',
                                 'speed': format_bytes(data.get('speed'))+'/s' if data.get('speed') else '',
                                 'eta': data.get('eta'), 'stage': 'Baixando'})
         elif data.get('status') == 'finished':
+            filename=data.get('filename') or info.get('filepath') or info.get('_filename')
+            if filename: self.produced_files.add(str(filename))
             self.progress.emit({'percent': 99, 'title': info.get('title') or 'Mídia',
                                 'stage': 'Convertendo / finalizando'})
+
+    def post_hook(self, data):
+        if self.stop_flag.is_set(): raise DownloadCancelled()
+        info=data.get('info_dict') or {}
+        filename=info.get('filepath') or data.get('filepath') or info.get('_filename')
+        if filename: self.produced_files.add(str(filename))
 
     def run(self):
         try:
@@ -205,11 +215,20 @@ class Downloader(QThread):
             before = {str(p) for p in self.output.iterdir() if p.is_file()}
             opts = yt_options(self.output, self.media_type, self.quality,
                               self.browser, self.cookies, self.playlist, self.playlist_limit,
-                              self.selected, self.hook)
+                              self.selected, self.hook, self.post_hook)
             with yt_dlp.YoutubeDL(opts) as ydl:
                 data = ydl.extract_info(self.url, download=True) or {}
-            after = [p for p in self.output.iterdir() if p.is_file()
-                     and str(p) not in before and p.suffix.lower() in MEDIA_EXT]
+            after=[]
+            for value in self.produced_files:
+                candidate=Path(value)
+                if candidate.is_file() and candidate.suffix.lower() in MEDIA_EXT: after.append(candidate)
+                elif self.media_type=='MP3':
+                    converted=candidate.with_suffix('.mp3')
+                    if converted.is_file(): after.append(converted)
+            if not after:
+                after = [p for p in self.output.iterdir() if p.is_file()
+                         and str(p) not in before and p.suffix.lower() in MEDIA_EXT]
+            after=list(dict.fromkeys(after))
             if not after and data.get('_type') != 'playlist':
                 # O arquivo pode já existir. O yt-dlp não precisa baixar novamente.
                 title = str(data.get('title') or '')

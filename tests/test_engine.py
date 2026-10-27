@@ -1,7 +1,7 @@
 """Validação das opções do motor sem acessar a rede."""
 import tempfile
 import unittest
-from fluxora.engine import is_playlist_url, is_valid_url, yt_options
+from fluxora.engine import DownloadCancelled, Downloader, is_playlist_url, is_valid_url, yt_options
 
 
 class EngineTests(unittest.TestCase):
@@ -25,6 +25,22 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(options['format'],'bestaudio/best')
         self.assertEqual(options['postprocessors'][0]['preferredcodec'],'mp3')
         self.assertEqual(options['postprocessors'][0]['preferredquality'],'320')
+
+    def test_single_playlist_item_uses_its_own_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker=Downloader('https://example.com/playlist',temp,'MP3','320 kbps',
+                              playlist=True,selected=[25])
+            updates=[]; worker.progress.connect(updates.append)
+            worker.hook({'status':'downloading','total_bytes':100,'downloaded_bytes':50,
+                         'info_dict':{'title':'Faixa','playlist_index':25,'playlist_count':100}})
+        self.assertEqual(updates[-1]['percent'],50)
+
+    def test_cancel_is_honoured_during_postprocessing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker=Downloader('https://example.com/video',temp,'MP3','320 kbps')
+            worker.cancel()
+            with self.assertRaises(DownloadCancelled):
+                worker.post_hook({'status':'started','info_dict':{}})
 
 
 if __name__=='__main__': unittest.main()

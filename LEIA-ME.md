@@ -40,13 +40,15 @@ Você também pode executar pelo terminal integrado do VS Code:
 - Detecção e análise de URL de vídeo/playlist com yt-dlp.
 - Seleção de itens de playlists com miniaturas carregadas apenas quando ficam visíveis, limitada ao número configurado para analisar por página (padrão 100; máximo 500).
 - Progresso, velocidade, estimativa, cancelamento, miniaturas de mídia quando disponíveis.
+- Fila com até três músicas simultâneas; playlists criam uma tarefa individual por faixa.
+- Histórico da sessão com filtros para fila, downloads ativos, concluídos, cancelados e falhas, além de remoção manual dos cartões.
 - Biblioteca persistente e responsiva de arquivos finalizados, com pesquisa, filtros e abertura do arquivo ou da pasta.
 - Ícone da bandeja pelo Qt (quando disponível).
 - Migração automática, no primeiro uso, do navegador e cookies.txt salvos pelo Fluxora 2.x.
 
 ## Limites desta primeira migração
 
-- **Não há downloads paralelos**: apenas um download de cada vez para evitar conflitos.
+- São executados no máximo três downloads simultâneos; os demais aguardam na fila.
 - **Pausar/retomar** downloads ainda não foi integrado; o botão está indisponível.
 - Conversor autônomo, gravador de tela/áudio e captura de dispositivo **não estão implementados**.
 - A biblioteca não importa o histórico visual temporário do Tkinter, pois ele não continha caminhos persistentes confiáveis.
