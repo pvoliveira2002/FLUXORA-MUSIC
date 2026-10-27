@@ -4,6 +4,7 @@ import sys
 import tempfile
 import time
 import unittest
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -49,7 +50,7 @@ class ConverterUiTests(unittest.TestCase):
     def test_global_format_affects_only_selected_items(self):
         video,audio=self.cards; audio.set_selected(False); self.page.apply_global_format('MKV')
         self.assertEqual(video.format.currentText(),'MKV'); self.assertEqual(audio.format.currentText(),'MP3')
-        self.assertEqual(self.page.convert.text(),'Converter 1 arquivo para MKV')
+        self.assertEqual(self.page.convert.text(),'Converter 1 arquivo')
 
     def test_incompatible_audio_to_video_is_unselected(self):
         video,audio=self.cards; video.set_selected(False); audio.set_selected(True); self.page.apply_global_format('MP4')
@@ -66,8 +67,48 @@ class ConverterUiTests(unittest.TestCase):
 
     def test_advanced_options_apply_only_to_selected_cards(self):
         first,second=self.cards; second.set_selected(False); self.page.resolution.setCurrentText('720p'); self.page.bitrate.setCurrentText('256 kbps')
+        self.assertEqual(first.resolution,'Original'); self.assertEqual(first.bitrate,'192 kbps')
+        self.page.apply_pending_settings()
         self.assertEqual(first.resolution,'720p'); self.assertEqual(first.bitrate,'256 kbps')
         self.assertEqual(second.resolution,'Original'); self.assertEqual(second.bitrate,'192 kbps')
+
+    def test_side_panel_waits_for_explicit_apply(self):
+        first,second=self.cards; second.set_selected(False)
+        self.page.video_category.click(); self.page.global_format_combo.setCurrentText('MKV')
+        self.assertEqual(first.format.currentText(),'MP3')
+        self.assertEqual(second.format.currentText(),'MP3')
+        self.page.apply_settings.click()
+        self.assertEqual(first.format.currentText(),'MKV')
+        self.assertEqual(second.format.currentText(),'MP3')
+        self.assertIn('Aplicado a 1',self.page.apply_feedback.text())
+
+    def test_individual_destination_is_used_by_task(self):
+        card=self.cards[0]; custom=self.folder/'destino individual'; card.output_dir=str(custom)
+        self.assertEqual(self.page._task_for_card(card).output_dir,str(custom))
+
+    def test_narrow_layout_collapses_settings_without_hiding_main_action(self):
+        self.page.resize(850,670); self.app.processEvents()
+        self.assertEqual(self.page.workspace.orientation(),Qt.Orientation.Vertical)
+        self.assertTrue(self.page.compact_settings_toggle.isVisible())
+        self.assertFalse(self.page.settings_panel.isVisible())
+        self.assertTrue(self.page.convert.isVisible())
+        self.page.compact_settings_toggle.click(); self.app.processEvents()
+        self.assertTrue(self.page.settings_panel.isVisible())
+        self.page.resize(1366,768); self.app.processEvents()
+        self.assertEqual(self.page.workspace.orientation(),Qt.Orientation.Horizontal)
+        self.assertTrue(self.page.settings_panel.isVisible())
+
+    def test_twenty_files_remain_compact_and_scrollable(self):
+        paths=[]
+        for number in range(20):
+            path=self.folder/f'lote_{number:02d}.wav'; shutil.copyfile(self.audio,path); paths.append(str(path))
+        self.page.add_paths(paths); deadline=time.monotonic()+10
+        while self.page.probes and time.monotonic()<deadline: self.app.processEvents(); time.sleep(.02)
+        self.app.processEvents()
+        self.assertEqual(len(self.page.cards),22)
+        self.assertTrue(all(card.maximumHeight()<=82 for card in self.page.cards.values()))
+        self.assertTrue(self.page.scroll.verticalScrollBar().maximum()>0)
+        for path in paths: Path(path).unlink(missing_ok=True)
 
     def test_mixed_individual_formats_do_not_claim_common_destination(self):
         video,audio=self.cards; video.format.setCurrentText('MKV'); audio.format.setCurrentText('FLAC'); self.page._update_summary()
@@ -93,6 +134,14 @@ class ConverterUiTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(audio.state,'Concluído'); self.assertTrue(Path(audio.output_path).is_file())
         self.assertEqual(completed[0][0],audio.path); self.assertEqual(completed[0][1],audio.output_path)
+
+    def test_redesigned_page_executes_real_mixed_source_batch(self):
+        self.page.convert_all(); deadline=time.monotonic()+20
+        while self.page.queue.is_active() and time.monotonic()<deadline: self.app.processEvents(); time.sleep(.02)
+        self.app.processEvents()
+        self.assertTrue(all(card.state=='Concluído' for card in self.cards))
+        self.assertTrue(all(Path(card.output_path).is_file() for card in self.cards))
+        self.assertFalse(self.page.cancel.isVisible())
 
     def test_folder_import_does_not_duplicate_existing_files(self):
         self.page.add_paths([str(self.folder)])
