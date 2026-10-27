@@ -28,11 +28,12 @@ class InterfaceTests(unittest.TestCase):
         self.window.hide(); self.window.deleteLater(); self.app.processEvents()
 
     def test_navigation_and_main_controls(self):
-        for index in range(4):
+        for index in range(5):
             self.window._show_page(index)
             self.assertEqual(self.window.pages.currentIndex(),index)
-        self.assertEqual(self.window.windowTitle(),'Fluxora 3.0 | Media Downloader')
+        self.assertEqual(self.window.windowTitle(),'Fluxora 3.1 | Downloads e Conversão de Mídia')
         self.assertEqual(self.window.playlist_table.columnCount(),5)
+        self.assertIn('MP3',self.window.converter_page.formats)
 
     def test_playlist_population_and_selection(self):
         entries=[{'index':1,'title':'Primeiro','duration':61,'thumbnail':''},

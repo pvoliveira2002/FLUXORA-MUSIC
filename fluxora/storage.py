@@ -15,8 +15,14 @@ class Storage:
             'output_dir': str(Path.home() / 'Downloads'),
             'browser': 'Não usar cookies', 'cookie_file': '',
             'playlist_limit': 100, 'close_to_tray': True,
+            'converter_output_dir': str(Path.home() / 'Videos'),
+            'converter_format': 'MP3', 'converter_quality': 'Equilibrado',
+            'converter_resolution': 'Original', 'converter_bitrate': '192 kbps',
+            'converter_keep_aspect': True,
+            'converter_batch': True, 'converter_apply_all': True,
         }
-        self.config = self._read(self.config_path, defaults)
+        loaded = self._read(self.config_path, {})
+        self.config = {**defaults, **loaded}
         if not self.config_path.exists():
             self._migrate_legacy_config(defaults)
         self.history = self._read(self.library_path, [])
@@ -57,7 +63,7 @@ class Storage:
 
     def save_config(self): self._write(self.config_path, self.config)
 
-    def add_files(self, paths, source_url='', thumb_url=''):
+    def add_files(self, paths, source_url='', thumb_url='', source_path='', origin='download'):
         current = {x.get('path') for x in self.history}
         count = 0
         for path in paths:
@@ -69,6 +75,7 @@ class Storage:
                 'size': path.stat().st_size,
                 'created_at': datetime.now().isoformat(timespec='minutes'),
                 'source_url': source_url, 'thumbnail': thumb_url,
+                'source_path': source_path, 'origin': origin,
             })
             count += 1
         self.history = self.history[:500]

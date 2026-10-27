@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Fluxora 3.0 - Instalacao
+title Fluxora 3.1 - Instalacao
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
     echo Criando ambiente Python...

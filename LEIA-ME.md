@@ -1,6 +1,6 @@
-# Fluxora 3.0 — versão PySide6 para VS Code
+# Fluxora 3.1 — downloads e conversão profissional de mídia
 
-Uma **nova interface executável** para o Fluxora, com organização inspirada no conceito visual aprovado: tema preto/verde-limão, barra lateral, Downloads, Prévia, Playlist e Biblioteca.
+Aplicativo Windows em PySide6 com o visual aprovado do Fluxora: tema preto/verde-limão, Downloads, Prévia, Playlist, Conversor e Biblioteca.
 
 ## Antes de começar
 
@@ -25,7 +25,9 @@ Você também pode executar pelo terminal integrado do VS Code:
 ## Organização do projeto
 
 - `main.py`: inicialização da interface Qt.
-- `fluxora/ui.py`: telas, componentes visuais, navegação, diálogos, cards, biblioteca.
+- `fluxora/ui.py`: telas existentes, navegação, downloads e biblioteca.
+- `fluxora/converter_ui.py`: interface responsiva, cartões e controles do Conversor.
+- `fluxora/converter.py`: metadados, perfis, argumentos seguros, fila QProcess e progresso real do FFmpeg.
 - `fluxora/theme.py`: cores e tema Qt (QSS).
 - `fluxora/icons.py`: ícones SVG desenhados no projeto.
 - `fluxora/engine.py`: análise/download/playlist/FFmpeg integrados ao Qt, com tarefas em segundo plano.
@@ -45,12 +47,17 @@ Você também pode executar pelo terminal integrado do VS Code:
 - Biblioteca persistente e responsiva de arquivos finalizados, com pesquisa, filtros e abertura do arquivo ou da pasta.
 - Ícone da bandeja pelo Qt (quando disponível).
 - Migração automática, no primeiro uso, do navegador e cookies.txt salvos pelo Fluxora 2.x.
+- Conversor local real com MP4, MKV, AVI, MOV, WEBM, MP3, WAV, FLAC, M4A e OGG, conforme os encoders presentes no FFmpeg.
+- Extração de áudio de vídeos, três perfis de qualidade, resolução original/1080p/720p/480p e bitrates de 128 a 320 kbps.
+- Arrastar e soltar, múltiplos arquivos, pasta inteira, fila sequencial, progresso real, estimativa, cancelamento e repetição após falha.
+- Arquivos temporários seguros, nomes únicos sem sobrescrever originais, suporte a espaços/acentos e registro técnico em `%LOCALAPPDATA%\Fluxora\fluxora.log`.
+- Conversões concluídas entram na Biblioteca e podem ser abertas, localizadas ou convertidas novamente.
 
 ## Limites desta primeira migração
 
 - São executados no máximo três downloads simultâneos; os demais aguardam na fila.
 - **Pausar/retomar** downloads ainda não foi integrado; o botão está indisponível.
-- Conversor autônomo, gravador de tela/áudio e captura de dispositivo **não estão implementados**.
+- Gravador de tela/áudio e captura de dispositivo **não estão implementados**.
 - A biblioteca não importa o histórico visual temporário do Tkinter, pois ele não continha caminhos persistentes confiáveis.
 - Uma pasta pode conter vídeos antigos que não apareçam automaticamente na biblioteca; a biblioteca grava os arquivos identificados ao concluir um download feito nesta versão.
 - Alguns sites exigem autenticação e podem deixar de funcionar devido a alterações externas. Não há garantia de que todo link seja compatível.
@@ -58,10 +65,20 @@ Você também pode executar pelo terminal integrado do VS Code:
 
 ## Testes e segurança
 
-Os testes automatizados cobrem armazenamento, migração de preferências, opções MP4/MP3, detecção de playlists e navegação/componentes das quatro telas. Downloads reais dependem da fonte, da rede e da validade da sessão do usuário e devem ser confirmados com mídia autorizada.
+Os testes automatizados cobrem armazenamento, downloads, playlists, navegação, detecção do FFmpeg, metadados, codecs, nomes seguros, progresso, lote, cancelamento e conversões reais locais. As mídias sintéticas usadas nos testes não dependem de internet. Downloads reais dependem da fonte, da rede e da validade da sessão do usuário e devem ser confirmados com mídia autorizada.
 
 Use URLs de mídia que você tenha permissão para baixar. Não coloque arquivos cookies.txt no GitHub — são dados privados de sessão.
 
 ## Testes locais no VS Code
 
 Depois de instalar as dependências, rode `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` para testar o projeto sem baixar mídia. Depois faça downloads autorizados MP4 e MP3.
+
+## Como testar o Conversor
+
+1. Abra o `iniciar_fluxora.bat` e escolha **Conversor** na barra lateral.
+2. Arraste um arquivo para a área indicada ou use **Adicionar arquivos**/**Adicionar pasta**.
+3. Escolha formato, qualidade, resolução, bitrate e destino. Cada cartão também permite um formato próprio.
+4. Clique em **Converter tudo**. A fila é processada uma conversão por vez para evitar sobrecarga.
+5. Ao concluir, abra a **Biblioteca** para abrir o arquivo, a pasta ou converter novamente.
+
+O FFprobe é utilizado quando instalado. Quando ele não está disponível, o Fluxora lê os metadados pela saída do próprio FFmpeg incluído por `imageio-ffmpeg`.

@@ -3,8 +3,8 @@
 Use este arquivo ao pedir alterações à IA de programação.
 
 ## Objetivo
-Refinar o Fluxora 3.0 em PySide6 para seguir com fidelidade a imagem
-`REFERENCIA_VISUAL.png` (quatro telas: Downloads, Prévia, Playlist e Biblioteca),
+Refinar o Fluxora 3.1 em PySide6 para seguir com fidelidade a imagem
+`REFERENCIA_VISUAL.png` (Downloads, Prévia, Playlist, Biblioteca e Conversor),
 sem perder o funcionamento real do yt-dlp/FFmpeg existente em `fluxora/engine.py`.
 
 ## Arquitetura
@@ -12,6 +12,8 @@ sem perder o funcionamento real do yt-dlp/FFmpeg existente em `fluxora/engine.py
 - `fluxora/theme.py`: cores, fontes, QSS
 - `fluxora/icons.py`: ícones SVG
 - `fluxora/engine.py`: extração, downloads, progressos e playlists
+- `fluxora/converter.py`: perfis, metadados, FFmpeg, fila e progresso de conversão
+- `fluxora/converter_ui.py`: tela e cartões do conversor
 - `fluxora/storage.py`: preferências e histórico
 - `main.py`: inicialização do app
 
@@ -30,7 +32,7 @@ sem perder o funcionamento real do yt-dlp/FFmpeg existente em `fluxora/engine.py
 2. Testes reais de MP4 e MP3 no Windows, com mensagens de erros claras.
 3. Testes de playlist com seleção parcial, navegação e limites.
 4. Melhorar ícones, espaçamentos, feedback ao passar mouse e adaptação ao DPI.
-5. Futuramente: conversor e gravadores — implementar de verdade antes de habilitar.
+5. Futuramente: gravadores — implementar de verdade antes de habilitar.
 
 ## Primeiro pedido recomendado ao Codex
 "Leia o projeto Fluxora 3.0 e a imagem REFERENCIA_VISUAL.png. Execute testes e

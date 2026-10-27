@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from .theme import BG, SIDEBAR, SURFACE, SURFACE2, GREEN, TEXT, MUTED, BORDER, SUBTLE, RED
 from .icons import icon
 from .storage import Storage
+from .converter_ui import ConverterPage
 from .engine import (
     Analyzer, Downloader, ImageFetcher, VIDEO_QUALITIES, AUDIO_QUALITIES, BROWSERS,
     is_valid_url, is_playlist_url, format_bytes,
@@ -205,7 +206,7 @@ class SettingsDialog(QDialog):
 
 class FluxoraWindow(QMainWindow):
     def __init__(self):
-        super().__init__(); self.setWindowTitle('Fluxora 3.0 | Media Downloader')
+        super().__init__(); self.setWindowTitle('Fluxora 3.1 | Downloads e Conversão de Mídia')
         self.resize(1330,825); self.setMinimumSize(1050,670)
         self.storage=Storage()
         self.active_analyzer=None
@@ -242,10 +243,12 @@ class FluxoraWindow(QMainWindow):
         self.video_page=self._build_preview_page(); self.pages.addWidget(self.video_page)
         self.playlist_page=self._build_playlist_page(); self.pages.addWidget(self.playlist_page)
         self.library_page=self._build_library_page(); self.pages.addWidget(self.library_page)
+        self.converter_page=ConverterPage(self.storage,self); self.pages.addWidget(self.converter_page)
+        self.converter_page.conversion_completed.connect(self._conversion_completed)
         footer=QWidget(); foot=row(spacing=7); footer.setLayout(foot)
         self.status_dot=text('●','Success'); foot.addWidget(self.status_dot)
         self.status_label=text('Sistema pronto para baixar','Muted'); foot.addWidget(self.status_label)
-        foot.addStretch(); foot.addWidget(text('FLUXORA 3.0  •  PYSIDE6','Subtle'))
+        foot.addStretch(); foot.addWidget(text('FLUXORA 3.1  •  PYSIDE6 + FFMPEG','Subtle'))
         body.addWidget(footer)
         self._show_page(0)
 
@@ -264,7 +267,9 @@ class FluxoraWindow(QMainWindow):
             self.nav_buttons[index]=b
         side.addSpacing(4)
         side.addWidget(text('FERRAMENTAS','Eyebrow'))
-        for title,ic in [('Conversor','convert'),('Gravador de tela','monitor'),('Gravador de áudio','mic'),('Captura de dispositivo','phone')]:
+        converter=push('Conversor','convert','Nav'); converter.setIconSize(QSize(21,21))
+        converter.clicked.connect(lambda checked=False:self._show_page(4)); side.addWidget(converter); self.nav_buttons[4]=converter
+        for title,ic in [('Gravador de tela','monitor'),('Gravador de áudio','mic'),('Captura de dispositivo','phone')]:
             b=push(title,ic,'Nav'); b.setEnabled(False)
             b.setToolTip('Módulo ainda não integrado.'); side.addWidget(b)
         side.addStretch(1)
@@ -461,6 +466,8 @@ class FluxoraWindow(QMainWindow):
             self.shutting_down=False
             QMessageBox.information(self,'Downloads em andamento','Alguns downloads ainda estão finalizando. Aguarde antes de encerrar.')
             return
+        if hasattr(self,'converter_page'):
+            self.converter_page.shutdown()
         QApplication.instance().quit()
     def closeEvent(self,event:QCloseEvent):
         if self.tray and self.storage.config.get('close_to_tray',True):
@@ -473,6 +480,9 @@ class FluxoraWindow(QMainWindow):
             if self.active_downloads or self.pending_downloads:
                 QMessageBox.information(self,'Downloads em andamento','Cancele ou aguarde a fila terminar antes de fechar o Fluxora.')
                 event.ignore(); return
+            if hasattr(self,'converter_page') and self.converter_page.is_active():
+                QMessageBox.information(self,'Conversão em andamento','Cancele ou aguarde a conversão terminar antes de fechar o Fluxora.')
+                event.ignore(); return
             event.accept(); QApplication.instance().quit()
 
     def resizeEvent(self,event):
@@ -483,11 +493,12 @@ class FluxoraWindow(QMainWindow):
     def _show_page(self,index):
         self.pages.setCurrentIndex(index)
         for k,b in self.nav_buttons.items():
-            b.setProperty('active','true' if k==(3 if index==3 else 0) else 'false')
+            active = 3 if index==3 else (4 if index==4 else 0)
+            b.setProperty('active','true' if k==active else 'false')
             b.style().unpolish(b); b.style().polish(b)
-        self.url_bar.setVisible(index!=3)
+        self.url_bar.setVisible(index in (0,1,2))
         self.download_button.setVisible(index==0)
-        self.analyze_button.setVisible(index!=3)
+        self.analyze_button.setVisible(index in (0,1,2))
         if index==3: self._refresh_library()
         self._refresh_space()
 
@@ -881,7 +892,7 @@ class FluxoraWindow(QMainWindow):
             self.library_grid.addWidget(empty,0,0,1,columns)
         else:
             for i, entry in enumerate(matches):
-                tile=frame('Card'); tile.setMinimumHeight(210)
+                tile=frame('Card'); tile.setMinimumHeight(246)
                 content=column((10,10,10,10),9); tile.setLayout(content)
                 cover=Cover(218,124); cover.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
                 cover.setMinimumWidth(180); cover.setMaximumWidth(16777215); cover.setFixedHeight(124)
@@ -898,8 +909,20 @@ class FluxoraWindow(QMainWindow):
                 folder=push('','folder','IconButton'); folder.setToolTip('Abrir pasta do arquivo')
                 folder.clicked.connect(lambda _,p=entry['path']:self.open_containing_folder(p))
                 actions.addWidget(folder); content.addLayout(actions)
+                reconvert=push('Converter novamente','convert')
+                reconvert.clicked.connect(lambda _,p=entry['path']:self._open_in_converter(p))
+                content.addWidget(reconvert)
                 self.library_grid.addWidget(tile,i//columns,i%columns)
         self.library_grid.setRowStretch((len(matches)+columns-1)//columns,1)
+
+    def _conversion_completed(self, source_path, output_path):
+        if self.storage.add_files([output_path], source_path=source_path, origin='conversion'):
+            self._refresh_library()
+        self.status(f'Conversão concluída: {Path(output_path).name}')
+
+    def _open_in_converter(self, path):
+        self.converter_page.add_paths([path])
+        self._show_page(4)
 
     def open_path(self,path):
         path=Path(path)
