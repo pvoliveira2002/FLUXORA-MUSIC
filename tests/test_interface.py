@@ -5,6 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from fluxora.theme import QSS
 from fluxora.ui import FluxoraWindow
@@ -44,6 +46,82 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(self.window.pl_download.isEnabled())
         self.window.select_playlist(False)
         self.assertFalse(self.window.pl_download.isEnabled())
+
+    def _fill_playlist(self,count=30):
+        entries=[{'index':number+101,'title':f'Música {number+1:03d}','duration':60,'thumbnail':''}
+                 for number in range(count)]
+        self.window._populate_playlist(entries); self.window._show_page(2); self.app.processEvents()
+        return entries
+
+    def _click_playlist(self,row,column=0,modifier=Qt.KeyboardModifier.NoModifier):
+        table=self.window.playlist_table
+        point=table.visualRect(table.model().index(row,column)).center()
+        QTest.mouseClick(table.viewport(),Qt.MouseButton.LeftButton,modifier,point)
+        self.app.processEvents()
+
+    def test_playlist_checkbox_individual_and_shift_range(self):
+        self._fill_playlist(30); table=self.window.playlist_table
+        self.window.select_playlist(False)
+        self._click_playlist(1)
+        self._click_playlist(19,modifier=Qt.KeyboardModifier.ShiftModifier)
+        checked=[row for row in range(30) if table.item(row,0).checkState()==Qt.CheckState.Checked]
+        self.assertEqual(checked,list(range(1,20)))
+        self.assertEqual(self.window.playlist_selected.text(),'19 vídeos selecionados')
+
+    def test_playlist_shift_can_uncheck_a_range_without_changing_others(self):
+        self._fill_playlist(30); table=self.window.playlist_table
+        self._click_playlist(1)
+        self._click_playlist(19,modifier=Qt.KeyboardModifier.ShiftModifier)
+        unchecked=[row for row in range(30) if table.item(row,0).checkState()==Qt.CheckState.Unchecked]
+        self.assertEqual(unchecked,list(range(1,20)))
+        self.assertEqual(table.item(0,0).checkState(),Qt.CheckState.Checked)
+        self.assertEqual(table.item(20,0).checkState(),Qt.CheckState.Checked)
+
+    def test_playlist_ctrl_shift_visual_selection_and_space(self):
+        self._fill_playlist(30); table=self.window.playlist_table
+        self.window.select_playlist(False)
+        self._click_playlist(2,3)
+        self._click_playlist(6,3,Qt.KeyboardModifier.ControlModifier)
+        selected={index.row() for index in table.selectionModel().selectedRows()}
+        self.assertEqual(selected,{2,6})
+        QTest.keyClick(table,Qt.Key.Key_Space); self.app.processEvents()
+        self.assertEqual({row for row in range(30) if table.item(row,0).checkState()==Qt.CheckState.Checked},{2,6})
+        QTest.keyClick(table,Qt.Key.Key_Space); self.app.processEvents()
+        self.assertFalse(any(table.item(row,0).checkState()==Qt.CheckState.Checked for row in range(30)))
+        self._click_playlist(10,3)
+        self._click_playlist(15,3,Qt.KeyboardModifier.ShiftModifier)
+        self.assertEqual({index.row() for index in table.selectionModel().selectedRows()},set(range(10,16)))
+
+    def test_playlist_ctrl_a_marks_only_visible_rows_and_search_preserves_checks(self):
+        self._fill_playlist(30); table=self.window.playlist_table
+        self.window.select_playlist(False); self.window.search_playlist('Música 00')
+        table.setFocus(); QTest.keyClick(table,Qt.Key.Key_A,Qt.KeyboardModifier.ControlModifier); QTest.keyClick(table,Qt.Key.Key_Space)
+        self.app.processEvents()
+        visible=[row for row in range(30) if not table.isRowHidden(row)]
+        checked=[row for row in range(30) if table.item(row,0).checkState()==Qt.CheckState.Checked]
+        self.assertEqual(checked,visible)
+        self.window.search_playlist('Música 030'); self.window.search_playlist('')
+        self.assertEqual([row for row in range(30) if table.item(row,0).checkState()==Qt.CheckState.Checked],visible)
+
+    def test_playlist_shift_checkbox_uses_only_visible_filtered_rows(self):
+        entries=[{'index':row+1,'title':f'{"Grupo A" if row % 2 == 0 else "Grupo B"} {row}','duration':60,'thumbnail':''}
+                 for row in range(20)]
+        self.window._populate_playlist(entries); self.window._show_page(2); self.window.select_playlist(False)
+        self.window.search_playlist('Grupo A'); self.app.processEvents()
+        self._click_playlist(2); self._click_playlist(10,modifier=Qt.KeyboardModifier.ShiftModifier)
+        checked=[row for row in range(20) if self.window.playlist_table.item(row,0).checkState()==Qt.CheckState.Checked]
+        self.assertEqual(checked,[2,4,6,8,10])
+
+    def test_playlist_handles_300_items_and_preserves_original_download_indices(self):
+        entries=self._fill_playlist(300); table=self.window.playlist_table
+        self.assertEqual(table.rowCount(),300)
+        self.window.select_playlist(False)
+        for row in (1,149,299): table.item(row,0).setCheckState(Qt.CheckState.Checked)
+        self.window.analyzed_info={'kind':'playlist','url':'https://example.com/list','entries':entries}
+        with patch.object(self.window,'_launch_download',return_value=True) as launch:
+            self.window.start_playlist_download()
+        self.assertEqual([call.args[4] for call in launch.call_args_list],[[102],[250],[400]])
+        self.assertEqual(self.window.playlist_selected.text(),'3 vídeos selecionados')
 
     def test_audio_choice_survives_video_analysis(self):
         self.window.change_type('MP3')

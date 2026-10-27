@@ -5,14 +5,15 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from PySide6.QtCore import Qt, QSize, QUrl, QTimer, QPoint, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QCloseEvent, QColor, QPainter, QLinearGradient
+from PySide6.QtCore import Qt, QSize, QUrl, QTimer, QPoint, QRect, QItemSelectionModel, QPropertyAnimation, QEasingCurve, Signal
+from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QCloseEvent, QColor, QPainter, QLinearGradient, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton, QHBoxLayout,
     QVBoxLayout, QGridLayout, QLineEdit, QComboBox, QProgressBar, QScrollArea,
     QStackedWidget, QFileDialog, QDialog, QFormLayout, QSpinBox, QCheckBox,
     QMessageBox, QSystemTrayIcon, QMenu, QSizePolicy, QTableWidget,
-    QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QStyledItemDelegate,
+    QStyleOptionViewItem,
 )
 from .theme import BG, SIDEBAR, SURFACE, SURFACE2, GREEN, TEXT, MUTED, BORDER, SUBTLE, RED
 from .icons import icon
@@ -84,6 +85,111 @@ class Cover(QLabel):
     def resizeEvent(self, event):
         self._rescale()
         super().resizeEvent(event)
+
+
+class PlaylistCheckDelegate(QStyledItemDelegate):
+    """Desenha indicadores checkable grandes e consistentes no tema escuro."""
+    SIZE = 21
+
+    def checkbox_rect(self, option):
+        rect=QRect(0,0,self.SIZE,self.SIZE); rect.moveCenter(option.rect.center()); return rect
+
+    def paint(self,painter,option,index):
+        if index.column()!=0:
+            super().paint(painter,option,index); return
+        clean=QStyleOptionViewItem(option)
+        clean.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+        super().paint(painter,clean,index)
+        box=self.checkbox_rect(option); state=index.data(Qt.ItemDataRole.CheckStateRole)
+        checked=state in (Qt.CheckState.Checked,Qt.CheckState.Checked.value)
+        painter.save(); painter.setRenderHint(QPainter.RenderHint.Antialiasing,True)
+        painter.setPen(QPen(QColor(GREEN if checked else '#A9BBC0'),1.6))
+        painter.setBrush(QColor(GREEN if checked else '#101B1F'))
+        painter.drawRoundedRect(box,4,4)
+        if checked:
+            painter.setPen(QPen(QColor('#0A1607'),2.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+            painter.drawLine(box.left()+5,box.center().y(),box.left()+9,box.bottom()-5)
+            painter.drawLine(box.left()+9,box.bottom()-5,box.right()-4,box.top()+5)
+        painter.restore()
+
+    def editorEvent(self,event,model,option,index):
+        return False
+
+
+class PlaylistTable(QTableWidget):
+    """Tabela com seleção de linhas no padrão Windows e marcação em lote."""
+    checks_changed=Signal()
+
+    def __init__(self,rows,columns,parent=None):
+        super().__init__(rows,columns,parent)
+        self.check_delegate=PlaylistCheckDelegate(self); self.setItemDelegateForColumn(0,self.check_delegate)
+        self.check_anchor=None; self.selection_anchor=None
+
+    def reset_anchors(self):
+        self.check_anchor=None; self.selection_anchor=None; self.clearSelection()
+
+    def visible_rows(self):
+        return [row for row in range(self.rowCount()) if not self.isRowHidden(row)]
+
+    def _between_visible(self,first,last):
+        visible=self.visible_rows()
+        if first not in visible or last not in visible: return [last]
+        a,b=visible.index(first),visible.index(last)
+        return visible[min(a,b):max(a,b)+1]
+
+    def _set_checked(self,rows,state):
+        self.blockSignals(True)
+        for row in rows:
+            item=self.item(row,0)
+            if item: item.setCheckState(state)
+        self.blockSignals(False); self.viewport().update(); self.checks_changed.emit()
+
+    def _select_rows(self,rows,clear=True):
+        selection=self.selectionModel()
+        if clear: selection.clearSelection()
+        flags=QItemSelectionModel.SelectionFlag.Select|QItemSelectionModel.SelectionFlag.Rows
+        for row in rows: selection.select(self.model().index(row,0),flags)
+
+    def select_visible_rows(self):
+        self._select_rows(self.visible_rows(),True)
+
+    def mousePressEvent(self,event):
+        index=self.indexAt(event.position().toPoint())
+        modifiers=event.modifiers()
+        if index.isValid() and index.column()==0:
+            option=QStyleOptionViewItem(); option.rect=self.visualRect(index)
+            if self.check_delegate.checkbox_rect(option).contains(event.position().toPoint()):
+                row=index.row()
+                if (modifiers & Qt.KeyboardModifier.ShiftModifier and self.check_anchor is not None
+                        and self.check_anchor in self.visible_rows()):
+                    rows=self._between_visible(self.check_anchor,row)
+                    anchor_item=self.item(self.check_anchor,0)
+                    state=anchor_item.checkState() if anchor_item else Qt.CheckState.Checked
+                    self._set_checked(rows,state); self._select_rows(rows,False)
+                else:
+                    item=self.item(row,0)
+                    state=Qt.CheckState.Unchecked if item.checkState()==Qt.CheckState.Checked else Qt.CheckState.Checked
+                    self._set_checked([row],state); self.check_anchor=row
+                event.accept(); return
+        if index.isValid() and modifiers & Qt.KeyboardModifier.ShiftModifier:
+            anchor=self.selection_anchor if self.selection_anchor in self.visible_rows() else index.row()
+            rows=self._between_visible(anchor,index.row())
+            self._select_rows(rows,not bool(modifiers & Qt.KeyboardModifier.ControlModifier))
+            self.selection_anchor=anchor; self.setCurrentIndex(index); event.accept(); return
+        if index.isValid(): self.selection_anchor=index.row()
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self,event):
+        if event.key()==Qt.Key.Key_A and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.select_visible_rows(); event.accept(); return
+        if event.key()==Qt.Key.Key_Space:
+            rows=sorted({index.row() for index in self.selectionModel().selectedRows() if not self.isRowHidden(index.row())})
+            if rows:
+                all_checked=all(self.item(row,0).checkState()==Qt.CheckState.Checked for row in rows)
+                self._set_checked(rows,Qt.CheckState.Unchecked if all_checked else Qt.CheckState.Checked)
+                self.check_anchor=rows[0]
+                event.accept(); return
+        super().keyPressEvent(event)
 
 
 class DownloadCard(QFrame):
@@ -397,9 +503,10 @@ class FluxoraWindow(QMainWindow):
         searchbar.addWidget(self.pl_media)
         searchbar.addWidget(text('Qualidade','Muted')); self.pl_quality=QComboBox(); self.pl_quality.addItems(VIDEO_QUALITIES)
         searchbar.addWidget(self.pl_quality); v.addLayout(searchbar)
-        self.playlist_table=QTableWidget(0,5)
+        self.playlist_table=PlaylistTable(0,5)
         self.playlist_table.setHorizontalHeaderLabels(['','Nº','Miniatura','Título','Duração'])
-        self.playlist_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.playlist_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.playlist_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.playlist_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.playlist_table.setAlternatingRowColors(True)
         self.playlist_table.verticalHeader().setVisible(False)
@@ -407,6 +514,7 @@ class FluxoraWindow(QMainWindow):
         self.playlist_table.setColumnWidth(0,49); self.playlist_table.setColumnWidth(1,55)
         self.playlist_table.setColumnWidth(2,112); self.playlist_table.setColumnWidth(4,85)
         self.playlist_table.itemChanged.connect(self.update_selected_count)
+        self.playlist_table.checks_changed.connect(self.update_selected_count)
         self.playlist_table.verticalScrollBar().valueChanged.connect(
             lambda _value: QTimer.singleShot(80,self._load_visible_playlist_thumbnails)
         )
@@ -655,10 +763,11 @@ class FluxoraWindow(QMainWindow):
     def _populate_playlist(self,entries):
         table=self.playlist_table
         table.blockSignals(True); table.setRowCount(0)
+        table.reset_anchors()
         self.playlist_covers.clear(); self.playlist_thumbs_loaded.clear()
         for ix,item in enumerate(entries):
             table.insertRow(ix); table.setRowHeight(ix,62)
-            check=QTableWidgetItem(); check.setFlags(Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsUserCheckable)
+            check=QTableWidgetItem(); check.setFlags(Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsSelectable|Qt.ItemFlag.ItemIsUserCheckable)
             check.setCheckState(Qt.CheckState.Checked); table.setItem(ix,0,check)
             number=QTableWidgetItem(str(item.get('index',ix+1))); number.setData(Qt.ItemDataRole.UserRole,item.get('index',ix+1))
             table.setItem(ix,1,number)
@@ -691,10 +800,14 @@ class FluxoraWindow(QMainWindow):
         self.pl_download.setEnabled(count>0)
 
     def select_playlist(self,value):
+        self.playlist_table.check_anchor=None; self.playlist_table.selection_anchor=None
         self.playlist_table.blockSignals(True)
         for i in range(self.playlist_table.rowCount()):
             self.playlist_table.item(i,0).setCheckState(Qt.CheckState.Checked if value else Qt.CheckState.Unchecked)
-        self.playlist_table.blockSignals(False); self.update_selected_count()
+        self.playlist_table.blockSignals(False)
+        if value: self.playlist_table.select_visible_rows()
+        else: self.playlist_table.clearSelection()
+        self.playlist_table.viewport().update(); self.update_selected_count()
 
     def search_playlist(self,needle):
         needle=needle.strip().lower()
