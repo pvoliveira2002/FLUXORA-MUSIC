@@ -27,6 +27,9 @@ PATHS = {
  'external': '<path d="M13 4h7v7M20 4 10 14"/><path d="M19 14v6H4V5h6"/>',
  'menu': '<path d="M4 6h16M4 12h16M4 18h16"/>',
  'alert': '<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>',
+ 'plus': '<path d="M12 5v14M5 12h14"/>',
+ 'trash': '<path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/>',
+ 'star': '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
 }
 
 def icon(name: str, color: str = '#A7B8BD', size: int = 21) -> QIcon:

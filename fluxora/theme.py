@@ -67,4 +67,28 @@ QCheckBox::indicator:checked {{ background: {GREEN}; border-color: {GREEN}; }}
 QDialog {{ background: {BG}; }}
 QTabWidget::pane {{ border: 0; }}
 QToolTip {{ color: {TEXT}; background: {SURFACE2}; border: 1px solid {BORDER}; }}
+QLabel#ConverterTitle {{ font-size: 27px; font-weight: 800; }}
+QLabel#ConverterEmblem {{ color: {GREEN}; font-size: 43px; font-weight: 800; min-width: 48px; }}
+QLabel#ConverterStrong {{ font-size: 12px; font-weight: 700; }}
+QLabel#UploadGlyph {{ background: #D7E1E5; color: #071113; border-radius: 21px; font-size: 25px; font-weight: 900; min-width: 44px; min-height: 42px; }}
+QLabel#MediaGlyph {{ background: #1B3034; color: {GREEN}; border-radius: 8px; font-size: 24px; font-weight: 800; }}
+QLabel#DestinationPath {{ background: #0C191D; border: 1px solid {BORDER}; border-radius: 7px; padding: 9px 11px; color: #D9E4E5; }}
+QFrame#ConverterPanel, QFrame#ConverterFooter, QFrame#ConverterAdvanced {{ background: #0C191D; border: 1px solid #244047; border-radius: 12px; }}
+QFrame#ConverterDrop {{ background: #09171B; border: 1px dashed #44616A; border-radius: 12px; }}
+QFrame#ConversionCard {{ background: #09171B; border: 1px solid #142B31; border-radius: 9px; }}
+QFrame#ConversionCard[batchSelected="true"] {{ background: #0B1B1D; border-left: 3px solid {GREEN}; }}
+QFrame#ConverterAction {{ background: transparent; border: 0; }}
+QPushButton#ConverterAdd {{ min-height: 66px; text-align: left; padding: 10px 18px; background: {GREEN}; border-color: {GREEN}; color: #0A1607; font-size: 14px; font-weight: 800; }}
+QPushButton#ConverterAdd:hover {{ background: #B8FF50; }}
+QPushButton#ConverterImport {{ min-height: 66px; text-align: left; padding: 10px 18px; background: #0D1B20; font-size: 13px; font-weight: 700; }}
+QPushButton#FormatChip {{ padding: 8px 10px; min-width: 42px; background: #0E1C21; }}
+QPushButton#FormatChip:checked {{ background: #173B12; color: {GREEN}; border: 1px solid {GREEN}; font-weight: 800; }}
+QPushButton#QualityChip {{ padding: 8px 10px; min-width: 72px; background: #0E1C21; }}
+QPushButton#QualityChip:checked {{ background: #173B12; color: {GREEN}; border: 1px solid {GREEN}; font-weight: 800; }}
+QPushButton#ConverterPrimary {{ min-height: 49px; background: {GREEN}; color: #091406; border-color: {GREEN}; font-size: 14px; font-weight: 850; }}
+QPushButton#ConverterPrimary:hover {{ background: #B8FF50; }}
+QPushButton#ConverterPrimary:disabled {{ background: #29421F; color: #71806D; border-color: #29421F; }}
+QPushButton#RoundButton {{ border-radius: 19px; min-width: 38px; min-height: 38px; max-width: 38px; max-height: 38px; padding: 0; background: #0B191D; }}
+QCheckBox#BatchCheck::indicator {{ width: 20px; height: 20px; border: 2px solid #82979D; border-radius: 5px; background: #0B171A; }}
+QCheckBox#BatchCheck::indicator:checked {{ background: {GREEN}; border-color: {GREEN}; }}
 '''

@@ -37,6 +37,14 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(self.window.playlist_table.columnCount(),5)
         self.assertIn('MP3',self.window.converter_page.formats)
 
+    def test_converter_action_stays_visible_at_supported_window_sizes(self):
+        self.window._show_page(4)
+        for width,height in ((1050,670),(1366,768),(1600,900),(1920,1080)):
+            self.window.resize(width,height); self.app.processEvents()
+            button=self.window.converter_page.convert
+            self.assertTrue(button.isVisible())
+            self.assertTrue(self.window.converter_page.rect().contains(button.mapTo(self.window.converter_page,button.rect().center())))
+
     def test_playlist_population_and_selection(self):
         entries=[{'index':1,'title':'Primeiro','duration':61,'thumbnail':''},
                  {'index':2,'title':'Segundo','duration':125,'thumbnail':''}]

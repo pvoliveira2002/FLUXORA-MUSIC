@@ -50,6 +50,7 @@ Você também pode executar pelo terminal integrado do VS Code:
 - Conversor local real com MP4, MKV, AVI, MOV, WEBM, MP3, WAV, FLAC, M4A e OGG, conforme os encoders presentes no FFmpeg.
 - Extração de áudio de vídeos, três perfis de qualidade, resolução original/1080p/720p/480p e bitrates de 128 a 320 kbps.
 - Arrastar e soltar, múltiplos arquivos, pasta inteira, fila sequencial, progresso real, estimativa, cancelamento e repetição após falha.
+- Interface do Conversor com seleção em lote, aplicação global de formato/qualidade apenas aos marcados, destinos individuais, conversão individual e botão principal inteligente.
 - Arquivos temporários seguros, nomes únicos sem sobrescrever originais, suporte a espaços/acentos e registro técnico em `%LOCALAPPDATA%\Fluxora\fluxora.log`.
 - Conversões concluídas entram na Biblioteca e podem ser abertas, localizadas ou convertidas novamente.
 
