@@ -22,6 +22,18 @@ Você também pode executar pelo terminal integrado do VS Code:
 .\.venv\Scripts\python.exe main.py
 ```
 
+## Instalador para outros computadores
+
+O arquivo `dist\installer\Fluxora-Setup-3.2.0.exe` instala o Fluxora em Windows 10/11 64 bits sem exigir Python, Node.js ou FFmpeg no computador do usuário. O instalador inclui os runtimes necessários, cria atalhos e oferece desinstalação pelo painel do Windows. Configurações, biblioteca e cookies permanecem fora da pasta do programa, em `%LOCALAPPDATA%\Fluxora`.
+
+Para gerar novamente o instalador numa máquina de desenvolvimento com Node.js e Inno Setup 6:
+
+```powershell
+.\build_installer.ps1
+```
+
+A Vercel pode hospedar uma página que aponte para o instalador, mas o binário deve ser publicado como arquivo de download, preferencialmente em uma Release do GitHub. A Vercel não executa o aplicativo Windows nem substitui o empacotamento.
+
 ## Organização do projeto
 
 - `main.py`: inicialização da interface Qt.

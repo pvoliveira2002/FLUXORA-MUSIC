@@ -21,6 +21,23 @@ BROWSERS = {'Não usar cookies': None, 'Google Chrome': 'chrome', 'Microsoft Edg
 MEDIA_EXT = {'.mp4', '.mkv', '.webm', '.mp3', '.m4a', '.wav', '.opus', '.flac', '.mov'}
 
 
+def javascript_runtime():
+    """Localiza o Node portátil da distribuição ou uma instalação do sistema."""
+    bundled = Path(__file__).resolve().parents[1] / 'runtime' / 'node.exe'
+    if bundled.is_file():
+        return str(bundled)
+    return shutil.which('node')
+
+
+def _enable_ejs(opts):
+    node = javascript_runtime()
+    if node:
+        opts['js_runtimes'] = {'node': {'path': node}}
+        # O pacote yt-dlp-ejs vai incluído na distribuição; o fallback remoto
+        # permite acompanhar desafios novos sem reinstalar todo o aplicativo.
+        opts['remote_components'] = ['ejs:github']
+
+
 def is_valid_url(url):
     item = urlparse(url)
     return item.scheme in {'http', 'https'} and bool(item.netloc)
@@ -74,10 +91,7 @@ def yt_options(output, media_type='MP4', quality='Melhor disponível', browser=N
         'windowsfilenames': True, 'quiet': True,
         'retries': 3, 'fragment_retries': 3,
     }
-    node = shutil.which('node')
-    if node:
-        opts['js_runtimes'] = {'node': {'path': node}}
-        opts['remote_components'] = {'ejs:github'}
+    _enable_ejs(opts)
     if browser:
         opts['user_agent'] = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                               'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -109,10 +123,7 @@ def yt_options(output, media_type='MP4', quality='Melhor disponível', browser=N
 def info_options(browser=None, cookie_file=None, playlist=False, limit=100):
     if yt_dlp is None: raise RuntimeError('Instale yt-dlp para analisar links.')
     opts = {'quiet': True, 'skip_download': True, 'noplaylist': not playlist}
-    node = shutil.which('node')
-    if node:
-        opts['js_runtimes'] = {'node': {'path': node}}
-        opts['remote_components'] = {'ejs:github'}
+    _enable_ejs(opts)
     if cookie_file: opts['cookiefile'] = cookie_file
     elif browser: opts['cookiesfrombrowser'] = (browser,)
     if playlist:

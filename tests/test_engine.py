@@ -1,11 +1,21 @@
 """Validação das opções do motor sem acessar a rede."""
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+import fluxora.engine as engine
 from fluxora.engine import (DownloadCancelled, Downloader, is_playlist_url,
-                            is_valid_url, thumbnail_url, yt_options)
+                            is_valid_url, javascript_runtime, thumbnail_url, yt_options)
 
 
 class EngineTests(unittest.TestCase):
+    def test_packaged_javascript_runtime_has_priority(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); (root/'fluxora').mkdir(); (root/'runtime').mkdir()
+            node=root/'runtime'/'node.exe'; node.touch()
+            with patch.object(engine,'__file__',str(root/'fluxora'/'engine.py')):
+                self.assertTrue(Path(javascript_runtime()).samefile(node))
+
     def test_url_and_playlist_detection(self):
         self.assertTrue(is_valid_url('https://www.youtube.com/watch?v=abc'))
         self.assertFalse(is_valid_url('arquivo local'))

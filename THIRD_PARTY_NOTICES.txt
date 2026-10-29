@@ -1,0 +1,10 @@
+Fluxora inclui componentes de código aberto necessários para funcionar sem instalações adicionais:
+
+- Python e bibliotecas Python compatíveis com suas respectivas licenças.
+- PySide6 / Qt for Python (LGPLv3/GPLv3/comercial): https://www.qt.io/qt-for-python
+- yt-dlp (Unlicense): https://github.com/yt-dlp/yt-dlp
+- yt-dlp-ejs: https://github.com/yt-dlp/ejs
+- FFmpeg distribuído por imageio-ffmpeg: https://github.com/imageio/imageio-ffmpeg
+- Node.js (MIT): https://github.com/nodejs/node
+
+Os avisos e textos completos de licença permanecem disponíveis nos projetos acima.
