@@ -30,12 +30,14 @@ class InterfaceTests(unittest.TestCase):
         self.window.hide(); self.window.deleteLater(); self.app.processEvents()
 
     def test_navigation_and_main_controls(self):
-        for index in range(5):
+        for index in range(6):
             self.window._show_page(index)
             self.assertEqual(self.window.pages.currentIndex(),index)
         self.assertEqual(self.window.windowTitle(),'Fluxora 3.1 | Downloads e Conversão de Mídia')
         self.assertEqual(self.window.playlist_table.columnCount(),5)
         self.assertIn('MP3',self.window.converter_page.formats)
+        self.assertFalse(self.window.screen_recorder_page.is_active())
+        self.assertTrue(self.window.nav_buttons[5].isEnabled())
 
     def test_converter_action_stays_visible_at_supported_window_sizes(self):
         self.window._show_page(4)
@@ -161,7 +163,7 @@ class InterfaceTests(unittest.TestCase):
             'https://example.com/video','MP3','320 kbps',False,None
         )
 
-    def test_queue_starts_at_most_three_individual_downloads(self):
+    def test_queue_processes_individual_downloads_sequentially(self):
         def fake_start(job):
             job['card'].start()
             self.window.active_downloads[job['card']]=object()
@@ -171,10 +173,97 @@ class InterfaceTests(unittest.TestCase):
                     f'https://example.com/video/{number}','MP3','320 kbps',False,None,
                     f'Faixa {number}'
                 )
-        self.assertEqual(len(self.window.active_downloads),3)
-        self.assertEqual(len(self.window.pending_downloads),2)
-        self.assertEqual(sum(card.state=='Baixando' for card in self.window.download_cards),3)
-        self.assertEqual(sum(card.state=='Na fila' for card in self.window.download_cards),2)
+        self.assertEqual(len(self.window.active_downloads),1)
+        self.assertEqual(len(self.window.pending_downloads),4)
+        self.assertEqual(sum(card.state=='Baixando' for card in self.window.download_cards),1)
+        self.assertEqual(sum(card.state=='Na fila' for card in self.window.download_cards),4)
+
+    def test_two_different_playlists_share_one_stable_queue(self):
+        first=[{'index':1,'title':'Lista A - 1','duration':60,'thumbnail':''},
+               {'index':2,'title':'Lista A - 2','duration':60,'thumbnail':''}]
+        second=[{'index':1,'title':'Lista B - 1','duration':60,'thumbnail':''},
+                {'index':2,'title':'Lista B - 2','duration':60,'thumbnail':''}]
+
+        def queue_playlist(url,entries):
+            self.window._analyzed({'kind':'playlist','url':url,'title':'Playlist',
+                                   'channel':'Canal','count':len(entries),
+                                   'thumbnail':'','entries':entries})
+            self.window.start_playlist_download()
+
+        def fake_start(job):
+            job['card'].start()
+            self.window.active_downloads[job['card']]=object()
+
+        with patch.object(self.window,'_start_download_job',side_effect=fake_start):
+            queue_playlist('https://example.com/playlist?list=A',first)
+            queue_playlist('https://example.com/playlist?list=B',second)
+
+        self.assertEqual(len(self.window.active_downloads),1)
+        self.assertEqual(len(self.window.pending_downloads),3)
+        queued_urls={job['url'] for job in self.window.pending_downloads}
+        self.assertEqual(queued_urls,{
+            'https://example.com/playlist?list=A',
+            'https://example.com/playlist?list=B',
+        })
+        self.assertEqual(len(self.window.queued_download_keys),4)
+
+    def test_new_url_cannot_requeue_the_previous_playlist(self):
+        old_url='https://example.com/playlist?list=OLD'
+        new_url='https://example.com/playlist?list=NEW'
+        self.window.url_entry.setText(old_url)
+        self.window._analyzed({'kind':'playlist','url':old_url,'title':'Antiga',
+                               'channel':'Canal','count':1,'thumbnail':'',
+                               'entries':[{'index':1,'title':'Faixa antiga','duration':60,'thumbnail':''}]})
+        self.assertTrue(self.window.pl_download.isEnabled())
+
+        self.window.url_entry.setText(new_url)
+        self.assertFalse(self.window.pl_download.isEnabled())
+        with patch.object(self.window,'_launch_download') as launch, \
+             patch('fluxora.ui.QMessageBox.information') as notice:
+            self.window.start_playlist_download()
+        launch.assert_not_called()
+        notice.assert_called_once()
+        self.assertIn('Analise a nova playlist',notice.call_args.args[2])
+
+    def test_stale_analysis_result_is_ignored_after_url_changes(self):
+        self.window.url_entry.setText('https://example.com/playlist?list=NEW')
+        old={'kind':'playlist','url':'https://example.com/playlist?list=OLD',
+             'title':'Antiga','channel':'Canal','count':1,'thumbnail':'',
+             'entries':[{'index':1,'title':'Faixa antiga','duration':60,'thumbnail':''}]}
+        self.window._analyzed(old)
+        self.assertIsNone(self.window.analyzed_info)
+        self.assertIn('URL mudou',self.window.status_label.text())
+
+    def test_thumbnail_loader_limits_parallel_threads_between_playlists(self):
+        # A Biblioteca pode iniciar miniaturas reais durante a criacao da janela.
+        # Termine essa fila antes de medir apenas as requisicoes deste teste.
+        self.window.shutting_down=True
+        self.window.image_queue.clear()
+        for fetch in list(self.window.fetchers): fetch.wait(10000)
+        self.app.processEvents()
+        self.window.fetchers.clear(); self.window.image_waiters.clear(); self.window.images.clear()
+        self.window.shutting_down=False
+        covers=[MagicMock() for _ in range(10)]
+        fake_fetchers=[]
+
+        def make_fetcher(*_args,**_kwargs):
+            fetch=MagicMock()
+            fake_fetchers.append(fetch)
+            return fetch
+
+        with patch('fluxora.ui.ImageFetcher',side_effect=make_fetcher) as fetcher_class:
+            for index,cover in enumerate(covers):
+                self.window._request_image(f'https://img.example/{index}.jpg',cover)
+
+            self.assertEqual(fetcher_class.call_count,4)
+            self.assertEqual(len(self.window.fetchers),4)
+            self.assertEqual(len(self.window.image_queue),6)
+
+            first_finished=fake_fetchers[0].finished.connect.call_args.args[0]
+            first_finished()
+            self.assertEqual(fetcher_class.call_count,5)
+            self.assertEqual(len(self.window.fetchers),4)
+            self.assertEqual(len(self.window.image_queue),5)
 
     def test_tray_notifies_once_only_after_the_whole_queue_finishes(self):
         if self.window.tray: self.window.tray.hide()

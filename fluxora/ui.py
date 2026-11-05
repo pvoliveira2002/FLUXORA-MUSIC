@@ -19,6 +19,7 @@ from .theme import BG, SIDEBAR, SURFACE, SURFACE2, GREEN, TEXT, MUTED, BORDER, S
 from .icons import icon
 from .storage import Storage
 from .converter_ui import ConverterPage
+from .screen_recorder_ui import ScreenRecorderPage
 from .engine import (
     Analyzer, Downloader, ImageFetcher, VIDEO_QUALITIES, AUDIO_QUALITIES, BROWSERS,
     is_valid_url, is_playlist_url, format_bytes,
@@ -316,12 +317,18 @@ class FluxoraWindow(QMainWindow):
         self.resize(1330,825); self.setMinimumSize(1050,670)
         self.storage=Storage()
         self.active_analyzer=None
-        self.max_parallel_downloads=3
+        # O yt-dlp, a leitura de cookies do navegador e o FFmpeg usam extensoes
+        # nativas. No Python 3.14.3, varias instancias simultaneas derrubaram o
+        # processo inteiro (0xc0000005), sem gerar uma excecao Python. Uma tarefa
+        # por vez mantem playlists diferentes na mesma fila sem sobrecarregar o
+        # runtime e segue a opcao de estabilidade escolhida para o Fluxora.
+        self.max_parallel_downloads=1
         self.active_downloads={}; self.pending_downloads=[]; self.queued_download_keys=set()
         self.download_batch_active=False
         self.download_batch_completed=0; self.download_batch_failed=0; self.download_batch_cancelled=0
         self.shutting_down=False
-        self.download_cards=[]; self.fetchers=[]; self.images={}; self.image_waiters={}; self.analyzed_info=None
+        self.download_cards=[]; self.fetchers=[]; self.image_queue=[]; self.max_parallel_images=4
+        self.images={}; self.image_waiters={}; self.analyzed_info=None
         self.playlist_covers={}; self.playlist_thumbs_loaded=set()
         self.filter_state='Todos'; self.library_filter='video'
         self.library_columns=0
@@ -341,6 +348,7 @@ class FluxoraWindow(QMainWindow):
         self.url_bar=frame('FormPanel'); bar=row((10,9,10,9),8); self.url_bar.setLayout(bar)
         self.url_entry=QLineEdit(); self.url_entry.setPlaceholderText('Cole o link do vídeo ou playlist aqui...')
         self.url_entry.setClearButtonEnabled(True); self.url_entry.returnPressed.connect(self.analyze)
+        self.url_entry.textChanged.connect(self._url_changed)
         bar.addWidget(self.url_entry,1)
         paste=push('Colar','paste'); paste.clicked.connect(self.paste_link); bar.addWidget(paste)
         self.analyze_button=push('Analisar','search'); self.analyze_button.clicked.connect(self.analyze); bar.addWidget(self.analyze_button)
@@ -353,6 +361,9 @@ class FluxoraWindow(QMainWindow):
         self.library_page=self._build_library_page(); self.pages.addWidget(self.library_page)
         self.converter_page=ConverterPage(self.storage,self); self.pages.addWidget(self.converter_page)
         self.converter_page.conversion_completed.connect(self._conversion_completed)
+        self.screen_recorder_page=ScreenRecorderPage(self.storage,self); self.pages.addWidget(self.screen_recorder_page)
+        self.screen_recorder_page.recording_completed.connect(self._screen_recording_completed)
+        self.screen_recorder_page.status_message.connect(self.status)
         footer=QWidget(); foot=row(spacing=7); footer.setLayout(foot)
         self.status_dot=text('●','Success'); foot.addWidget(self.status_dot)
         self.status_label=text('Sistema pronto para baixar','Muted'); foot.addWidget(self.status_label)
@@ -377,7 +388,9 @@ class FluxoraWindow(QMainWindow):
         side.addWidget(text('FERRAMENTAS','Eyebrow'))
         converter=push('Conversor','convert','Nav'); converter.setIconSize(QSize(21,21))
         converter.clicked.connect(lambda checked=False:self._show_page(4)); side.addWidget(converter); self.nav_buttons[4]=converter
-        for title,ic in [('Gravador de tela','monitor'),('Gravador de áudio','mic'),('Captura de dispositivo','phone')]:
+        recorder=push('Gravador de tela','monitor','Nav'); recorder.setIconSize(QSize(21,21))
+        recorder.clicked.connect(lambda checked=False:self._show_page(5)); side.addWidget(recorder); self.nav_buttons[5]=recorder
+        for title,ic in [('Gravador de áudio','mic'),('Captura de dispositivo','phone')]:
             b=push(title,ic,'Nav'); b.setEnabled(False)
             b.setToolTip('Módulo ainda não integrado.'); side.addWidget(b)
         side.addStretch(1)
@@ -578,6 +591,8 @@ class FluxoraWindow(QMainWindow):
             return
         if hasattr(self,'converter_page'):
             self.converter_page.shutdown()
+        if hasattr(self,'screen_recorder_page'):
+            self.screen_recorder_page.shutdown()
         QApplication.instance().quit()
     def closeEvent(self,event:QCloseEvent):
         if self.tray and self.storage.config.get('close_to_tray',True):
@@ -593,6 +608,9 @@ class FluxoraWindow(QMainWindow):
             if hasattr(self,'converter_page') and self.converter_page.is_active():
                 QMessageBox.information(self,'Conversão em andamento','Cancele ou aguarde a conversão terminar antes de fechar o Fluxora.')
                 event.ignore(); return
+            if hasattr(self,'screen_recorder_page') and self.screen_recorder_page.is_active():
+                QMessageBox.information(self,'Gravação em andamento','Pare e salve a gravação antes de fechar o Fluxora.')
+                event.ignore(); return
             event.accept(); QApplication.instance().quit()
 
     def resizeEvent(self,event):
@@ -603,7 +621,7 @@ class FluxoraWindow(QMainWindow):
     def _show_page(self,index):
         self.pages.setCurrentIndex(index)
         for k,b in self.nav_buttons.items():
-            active = 3 if index==3 else (4 if index==4 else 0)
+            active = index if index in (3,4,5) else 0
             b.setProperty('active','true' if k==active else 'false')
             b.style().unpolish(b); b.style().polish(b)
         self.url_bar.setVisible(index in (0,1,2))
@@ -632,6 +650,14 @@ class FluxoraWindow(QMainWindow):
         content=QApplication.clipboard().text().strip()
         if content: self.url_entry.setText(content)
         else: self.status('A área de transferência está vazia.')
+
+    def _url_changed(self,value):
+        """Impede que a tabela anterior seja usada para uma URL recém-colada."""
+        current=value.strip()
+        analyzed_url=(self.analyzed_info or {}).get('url','')
+        if analyzed_url and current != analyzed_url:
+            self.pl_download.setEnabled(False)
+            self.status('Nova URL detectada — clique em Analisar para carregar o conteúdo correto.')
 
     def change_type(self,media):
         for b,k in self.type_chips: b.setChecked(media==k)
@@ -729,6 +755,7 @@ class FluxoraWindow(QMainWindow):
         playlist=(self.mode=='PLAYLIST' or is_playlist_url(url))
         self._show_page(2 if playlist else 1)
         self.status('Analisando playlist...' if playlist else 'Buscando dados do vídeo...')
+        self.pl_download.setEnabled(False)
         self.analyze_button.setEnabled(False); self.analyze_button.setText('Analisando...')
         selected_browser=BROWSERS.get(self.storage.config.get('browser','Não usar cookies'))
         cookies=self.storage.config.get('cookie_file') or None
@@ -741,6 +768,10 @@ class FluxoraWindow(QMainWindow):
         worker.start()
 
     def _analyzed(self,info):
+        current_url=self.url_entry.text().strip()
+        if current_url and info.get('url') != current_url:
+            self.status('A URL mudou durante a análise. Clique em Analisar novamente.')
+            return
         self.analyzed_info=info
         self.status('Análise concluída')
         requested_media=self._selected_media_type()
@@ -821,6 +852,10 @@ class FluxoraWindow(QMainWindow):
     def start_playlist_download(self):
         if not self.analyzed_info or self.analyzed_info.get('kind')!='playlist':
             QMessageBox.information(self,'Playlist','Analise uma playlist antes de baixar.'); return
+        current_url=self.url_entry.text().strip()
+        if current_url and self.analyzed_info.get('url') != current_url:
+            self.pl_download.setEnabled(False)
+            QMessageBox.information(self,'Playlist desatualizada','A URL foi alterada. Analise a nova playlist antes de baixar.'); return
         selected_rows=[i for i in range(self.playlist_table.rowCount())
                        if self.playlist_table.item(i,0).checkState()==Qt.CheckState.Checked]
         if not selected_rows: QMessageBox.information(self,'Playlist','Selecione pelo menos um vídeo.'); return
@@ -972,20 +1007,30 @@ class FluxoraWindow(QMainWindow):
             if cover not in self.image_waiters[url]: self.image_waiters[url].append(cover)
             return
         self.image_waiters[url]=[cover]
-        fetch=ImageFetcher(url,self)
-        # reter referência até a thread terminar
-        self.fetchers.append(fetch)
-        def on_loaded(_url,data):
-            self.images[_url]=data
-            for target in self.image_waiters.get(_url,[]):
-                try: target.set_image(data)
-                except RuntimeError: pass
-        fetch.loaded.connect(on_loaded)
-        def on_finished():
-            self.image_waiters.pop(url,None)
-            if fetch in self.fetchers: self.fetchers.remove(fetch)
-        fetch.finished.connect(on_finished)
-        fetch.start()
+        self.image_queue.append(url)
+        self._process_image_queue()
+
+    def _process_image_queue(self):
+        """Evita criar dezenas de QThreads ao trocar entre playlists."""
+        if self.shutting_down: return
+        while self.image_queue and len(self.fetchers)<self.max_parallel_images:
+            url=self.image_queue.pop(0)
+            if url not in self.image_waiters: continue
+            fetch=ImageFetcher(url,self)
+            # Reter a referência até a thread terminar evita destruição precoce.
+            self.fetchers.append(fetch)
+            def on_loaded(_url,data):
+                self.images[_url]=data
+                for target in self.image_waiters.get(_url,[]):
+                    try: target.set_image(data)
+                    except RuntimeError: pass
+            fetch.loaded.connect(on_loaded)
+            def on_finished(_url=url,_fetch=fetch):
+                self.image_waiters.pop(_url,None)
+                if _fetch in self.fetchers: self.fetchers.remove(_fetch)
+                self._process_image_queue()
+            fetch.finished.connect(on_finished)
+            fetch.start()
 
     def set_library_filter(self,media):
         self.library_filter=media
@@ -1056,6 +1101,14 @@ class FluxoraWindow(QMainWindow):
         if self.storage.add_files([output_path], source_path=source_path, origin='conversion'):
             self._refresh_library()
         self.status(f'Conversão concluída: {Path(output_path).name}')
+
+    def _screen_recording_completed(self, output_path):
+        if self.storage.add_files([output_path], origin='screen_recording'):
+            self._refresh_library()
+        self.status(f'Gravação concluída: {Path(output_path).name}')
+        if self.tray:
+            self.tray.showMessage('Gravação concluída', Path(output_path).name,
+                                  QSystemTrayIcon.MessageIcon.Information, 3000)
 
     def _open_in_converter(self, path):
         self.converter_page.add_paths([path])

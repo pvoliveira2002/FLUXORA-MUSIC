@@ -1,0 +1,1224 @@
+================================================================================
+FLUXORA 3.2 - MANUAL COMPLETO DO PROJETO PARA INICIANTES
+================================================================================
+
+Documento criado em: 29/10/2026
+Projeto: Fluxora
+Versao documentada: 3.2.0
+Repositorio: https://github.com/pvoliveira2002/FLUXORA-MUSIC
+
+
+COMO USAR ESTE DOCUMENTO
+------------------------
+
+Este arquivo foi escrito para uma pessoa que ainda nao conhece programacao.
+Ele explica o que foi construido, por que cada escolha foi feita, como as pecas
+se conectam e como continuar o projeto no futuro.
+
+Nao e necessario decorar tudo. Pense neste documento como o manual tecnico e a
+memoria do Fluxora. Quando surgir uma duvida, procure o assunto pelo nome usando
+Ctrl + F no Bloco de Notas.
+
+
+================================================================================
+1. O QUE E O FLUXORA?
+================================================================================
+
+O Fluxora e um aplicativo para Windows que possui duas funcoes principais:
+
+1. Receber uma URL de uma midia autorizada e baixar video em MP4 ou audio em
+   MP3, inclusive quando a URL representa uma playlist.
+2. Converter arquivos que ja estao no computador entre formatos de video e
+   audio.
+
+Ele nasceu com a ideia de oferecer uma experiencia parecida com a do aTube
+Catcher, mas com identidade propria, visual preto e verde neon, interface mais
+moderna e foco em uma operacao simples.
+
+O aplicativo nao e apenas uma tela bonita. Por tras dela existem componentes
+separados para analisar links, organizar filas, baixar dados, juntar audio e
+video, converter arquivos, salvar configuracoes e criar um instalador.
+
+IMPORTANTE: o Fluxora deve ser usado somente para conteudo que o usuario tenha
+permissao para baixar. Sites podem alterar suas regras e seus mecanismos a
+qualquer momento. Portanto, nenhum aplicativo desse tipo pode garantir que toda
+URL funcionara para sempre.
+
+
+================================================================================
+2. UMA ANALOGIA PARA ENTENDER O PROJETO
+================================================================================
+
+Imagine o Fluxora como um restaurante:
+
+- A interface e o salao onde o cliente faz o pedido.
+- O engine.py e o garcom que entende o pedido e leva para a cozinha.
+- O yt-dlp encontra e traz os ingredientes da internet.
+- O FFmpeg prepara, mistura e entrega o prato no formato solicitado.
+- A fila organiza a ordem dos pedidos.
+- O storage.py e o caderno que guarda configuracoes e a biblioteca.
+- Os testes sao a inspecao que verifica se cada parte continua funcionando.
+- O instalador e a embalagem que permite levar o restaurante para outro PC.
+
+Separar essas responsabilidades foi importante. Se tudo estivesse em um unico
+arquivo, uma pequena mudanca visual poderia quebrar os downloads. Com modulos
+separados, cada parte tem uma funcao clara e e mais facil localizar problemas.
+
+
+================================================================================
+3. TECNOLOGIAS USADAS E O MOTIVO DE CADA UMA
+================================================================================
+
+3.1 Python 3.13
+----------------
+
+Python e a linguagem principal do projeto. Uma linguagem e a forma usada para
+escrever instrucoes que o computador consegue executar.
+
+O projeto começou no Python 3.14.3, mas essa versao apresentou uma violacao de
+memoria nativa no Windows durante filas longas com PySide6. O ambiente de
+desenvolvimento e o empacotamento passaram a usar Python 3.13.16, uma linha mais
+madura e oficialmente compativel com o PySide6. Isso nao muda a aparencia nem as
+funcoes do Fluxora; muda apenas o motor que executa o codigo.
+
+Por que foi usado:
+
+- E legivel e relativamente amigavel para iniciantes.
+- Possui bibliotecas maduras para interface, downloads e arquivos.
+- Permite desenvolver mais rapidamente do que linguagens de nivel mais baixo.
+- O yt-dlp, componente central do projeto, tambem e feito para o ecossistema
+  Python.
+
+Quem instala o Fluxora pelo instalador pronto NAO precisa instalar Python. O
+Python e levado dentro do pacote final. Python so e necessario na maquina de
+quem vai editar e gerar uma nova versao do programa.
+
+
+3.2 PySide6 e Qt
+----------------
+
+PySide6 e a ponte entre Python e o Qt. Qt e um conjunto profissional de pecas
+para construir janelas, botoes, tabelas, menus, barras de progresso e outros
+elementos de interface.
+
+Por que substituimos a interface antiga em Tkinter:
+
+- PySide6 oferece componentes mais modernos e flexiveis.
+- Facilita tarefas em segundo plano sem congelar a janela.
+- Tem melhor suporte para tabelas, selecao, icone da bandeja e telas complexas.
+- Permite adaptar melhor a interface a resolucoes e escalas DPI diferentes.
+
+Um "widget" e simplesmente um elemento da tela, como um botao ou campo de
+texto. Um "layout" organiza esses widgets automaticamente.
+
+
+3.3 QSS (Qt Style Sheets)
+-------------------------
+
+QSS e a linguagem usada para definir a aparencia dos elementos Qt. Ela lembra
+o CSS usado em sites.
+
+No Fluxora, o QSS define:
+
+- fundo preto e tons de verde muito escuro;
+- verde neon como cor de destaque;
+- cantos arredondados;
+- cores de texto;
+- aparencia ao passar o mouse;
+- campos, botoes, listas, barras e menus.
+
+Centralizar o tema em fluxora/theme.py evita repetir cores em dezenas de pontos
+do programa. Se a identidade visual mudar no futuro, a maior parte da alteracao
+pode ser feita nesse local.
+
+
+3.4 yt-dlp
+----------
+
+yt-dlp e a ferramenta que interpreta a URL, consulta os dados disponiveis e
+realiza o download das faixas de audio e video.
+
+Ele informa, por exemplo:
+
+- titulo;
+- duracao;
+- miniatura;
+- formatos e qualidades disponiveis;
+- itens de uma playlist;
+- progresso do download.
+
+O Fluxora nao tenta reinventar esse trabalho complexo. Ele usa o yt-dlp como
+motor e apresenta seus recursos em uma interface mais simples.
+
+
+3.5 FFmpeg e imageio-ffmpeg
+---------------------------
+
+FFmpeg e uma ferramenta especializada em audio e video. Ela trabalha por
+comandos, sem precisar de uma janela propria.
+
+No Fluxora, o FFmpeg e usado para:
+
+- unir a faixa de video com a faixa de audio;
+- criar um MP4 que tenha imagem E som;
+- extrair audio e gerar MP3;
+- converter entre varios formatos;
+- mudar resolucao, qualidade e bitrate;
+- ler informacoes tecnicas do arquivo.
+
+Muitos sites oferecem a melhor imagem e o melhor audio em arquivos separados.
+Por isso um MP4 podia sair sem som nas primeiras tentativas. A correcao foi
+pedir as duas faixas ao yt-dlp e deixar o FFmpeg uni-las no fim.
+
+imageio-ffmpeg ajuda a fornecer uma copia compativel do FFmpeg dentro do
+ambiente Python e, depois, dentro do aplicativo empacotado. Assim o usuario do
+instalador nao precisa procurar e configurar FFmpeg manualmente.
+
+
+3.6 Node.js e o resolvedor EJS
+------------------------------
+
+Algumas fontes de midia usam desafios escritos em JavaScript para validar o
+acesso. Node.js e um programa capaz de executar JavaScript fora do navegador.
+
+Quando apareceram avisos como "Signature solving failed", "n challenge
+solving failed" e "Only images are available", faltava ao yt-dlp uma forma
+adequada de resolver esses desafios.
+
+Por isso o Fluxora passou a:
+
+- localizar primeiro o Node.js incluido no aplicativo;
+- usar o Node do sistema como alternativa;
+- permitir o componente remoto EJS recomendado pelo yt-dlp quando necessario.
+
+O instalador atual inclui um Node portatil. O usuario final nao precisa instalar
+Node separadamente.
+
+
+3.7 JSON
+--------
+
+JSON e um formato de texto usado para guardar dados organizados. Ele funciona
+como uma ficha com nomes e valores.
+
+O Fluxora usa armazenamento local para lembrar configuracoes e a biblioteca.
+Esses dados ficam em %LOCALAPPDATA%\Fluxora, e nao junto dos arquivos do
+programa. Isso e importante porque:
+
+- uma atualizacao nao apaga as preferencias;
+- a desinstalacao ou reinstalacao nao precisa destruir a biblioteca;
+- o Windows permite gravar nessa pasta sem exigir modo administrador.
+
+
+3.8 Threads, tarefas em segundo plano e sinais do Qt
+----------------------------------------------------
+
+Se uma analise ou download longo fosse executado diretamente na interface, a
+janela pareceria travada. O Windows poderia mostrar "Nao esta respondendo".
+
+As tarefas demoradas sao executadas fora da linha principal da interface. Os
+"sinais" do Qt funcionam como recados seguros:
+
+- o motor informa que o progresso mudou;
+- a interface recebe o recado;
+- a barra e o texto sao atualizados;
+- a janela continua respondendo ao mouse.
+
+Esse modelo tambem e usado no conversor por meio de QProcess, que executa o
+FFmpeg e permite acompanhar sua saida sem bloquear a tela.
+
+
+3.9 PyInstaller
+---------------
+
+PyInstaller reune o codigo Python, as bibliotecas, o interpretador e os arquivos
+necessarios em uma pasta de aplicativo para Windows.
+
+Ele nao transforma magicamente Python em outra linguagem. Ele monta um pacote
+autossuficiente para que outro computador consiga executar o programa sem ter
+Python instalado.
+
+O projeto usa o modo "onedir", isto e, um executavel acompanhado de uma pasta
+interna. Esse modo costuma iniciar mais rapido e e mais previsivel para um app
+com Qt, FFmpeg e Node do que comprimir tudo em um unico executavel temporario.
+
+
+3.10 Inno Setup
+---------------
+
+Inno Setup pega a pasta produzida pelo PyInstaller e cria o instalador com
+assistente, atalhos e desinstalador.
+
+Ele e responsavel pelo arquivo:
+
+dist\installer\Fluxora-Setup-3.2.0.exe
+
+Na maquina de desenvolvimento, o Inno Setup 6 precisa estar instalado para
+gerar novamente esse arquivo. Para distribuicao comercial, consulte tambem as
+condicoes atuais de licenciamento do Inno Setup.
+
+
+3.11 Git e GitHub
+-----------------
+
+Git guarda o historico das alteracoes. Cada "commit" e como uma fotografia do
+projeto em um momento importante, acompanhada de uma descricao.
+
+GitHub guarda uma copia remota do repositorio. Ele ajuda a:
+
+- proteger o codigo contra perda do computador;
+- acessar o projeto em outra maquina;
+- comparar mudancas;
+- publicar versoes e instaladores;
+- executar testes automaticos.
+
+
+3.12 GitHub Actions
+-------------------
+
+GitHub Actions e um computador temporario do proprio GitHub que segue uma
+receita automatica. Ao publicar uma tag de versao, o fluxo deste projeto pode:
+
+1. preparar o Windows;
+2. instalar dependencias;
+3. executar os testes;
+4. montar o aplicativo;
+5. gerar o instalador;
+6. anexar o instalador a uma Release.
+
+Isso reduz a dependencia de um unico computador pessoal para criar o produto.
+
+
+3.13 Vercel
+-----------
+
+Vercel e apropriada para hospedar sites, nao para executar um aplicativo
+Windows de escritorio. Ela pode hospedar uma pagina bonita do Fluxora com um
+botao "Baixar", mas esse botao deve apontar para o instalador publicado, por
+exemplo, no GitHub Releases.
+
+Colocar o codigo do Fluxora na Vercel nao faria o aplicativo Windows funcionar
+em qualquer PC. A portabilidade foi resolvida pelo instalador, que leva Python,
+Qt, Node e FFmpeg junto com o programa.
+
+
+================================================================================
+4. MAPA DOS ARQUIVOS DO PROJETO
+================================================================================
+
+main.py
+-------
+E a porta de entrada. Prepara o aplicativo Qt, define informacoes basicas e abre
+a janela principal.
+
+fluxora/ui.py
+-------------
+Contem a maior parte da interface principal: navegacao, Downloads, analise de
+URL, tela de playlist, cartoes de progresso, filtros e Biblioteca. Tambem liga
+os eventos visuais aos comandos do motor.
+
+fluxora/engine.py
+-----------------
+E o motor de analise e download. Integra yt-dlp, FFmpeg, cookies, playlists,
+progresso, tarefas em segundo plano e tratamento de erros.
+
+fluxora/converter_ui.py
+-----------------------
+E a interface do Conversor 3.2: lista compacta, selecao de arquivos, formatos,
+qualidade, destino, botoes individuais, painel responsivo e status.
+
+fluxora/converter.py
+--------------------
+E o motor do Conversor. Le metadados, monta comandos seguros para o FFmpeg,
+controla a fila sequencial, calcula progresso, cancela processos e escolhe nomes
+de saida sem sobrescrever o original.
+
+fluxora/theme.py
+----------------
+Centraliza o tema preto e verde neon, tamanhos, bordas e estados visuais.
+
+fluxora/icons.py
+----------------
+Gera icones SVG com um estilo uniforme. SVG e um desenho feito por formas
+matematicas, por isso continua nitido em tamanhos diferentes.
+
+fluxora/storage.py
+------------------
+Salva e carrega configuracoes e registros persistentes em JSON. Tambem ajuda a
+manter a Biblioteca entre uma abertura e outra do aplicativo.
+
+assets\fluxora-logo.png e assets\Fluxora.ico
+------------------------------------------------
+Sao a identidade visual. A imagem aparece dentro da interface e o ICO aparece
+na janela, barra de tarefas, bandeja, atalhos e instalador.
+
+REFERENCIA_VISUAL.png
+---------------------
+E o conceito visual aprovado usado como guia. Nao e uma captura real do app e
+nao deve ser confundido com uma tela funcional.
+
+tests\
+------
+Contem testes automaticos para armazenamento, motor, interface e conversor.
+
+Fluxora.spec
+------------
+E a receita do PyInstaller: informa o arquivo inicial, dados, icones e modulos
+que precisam entrar no pacote.
+
+installer\Fluxora.iss
+---------------------
+E a receita do Inno Setup: nome, versao, pasta de instalacao, atalhos,
+desinstalador e arquivos incluidos.
+
+build_installer.ps1
+-------------------
+Automatiza a geracao do pacote e do instalador, evitando uma longa sequencia de
+comandos manuais.
+
+requirements.txt
+----------------
+Lista as bibliotecas necessarias para executar e desenvolver o Fluxora:
+PySide6, yt-dlp e imageio-ffmpeg.
+
+requirements-build.txt
+----------------------
+Lista o PyInstaller, usado somente para montar a distribuicao.
+
+instalar.bat
+------------
+Cria o ambiente virtual .venv e instala as dependencias de desenvolvimento.
+
+iniciar_fluxora.bat
+-------------------
+Abre o aplicativo em desenvolvimento sem deixar a janela preta do terminal.
+
+iniciar_fluxora_debug.bat
+-------------------------
+Abre o aplicativo com o terminal visivel. E a melhor opcao quando algo falha e
+e preciso ler mensagens tecnicas.
+
+.github\workflows\windows-release.yml
+--------------------------------------
+E a receita de testes, compilacao e publicacao automatica no GitHub.
+
+THIRD_PARTY_NOTICES.txt
+-----------------------
+Registra componentes de terceiros e suas informacoes de licenca.
+
+
+================================================================================
+5. HISTORIA DAS ALTERACOES E POR QUE ELAS FORAM FEITAS
+================================================================================
+
+5.1 Inicio: um baixador simples
+-------------------------------
+
+O pedido inicial era um aplicativo de uso proprio no estilo aTube Catcher:
+colar uma URL, escolher MP4 ou MP3 e selecionar qualidade.
+
+As primeiras tentativas mostraram os problemas reais desse tipo de aplicativo:
+
+- pedido de login para confirmar que o usuario nao era um robo;
+- cookies invalidos ou rotacionados;
+- erro HTTP 403 Forbidden;
+- formato solicitado indisponivel;
+- desafios de assinatura JavaScript;
+- FFmpeg ausente;
+- MP4 baixado sem audio.
+
+Esses erros foram importantes porque revelaram que uma interface simples ainda
+precisava de uma estrutura robusta por baixo.
+
+
+5.2 Fluxora 3.0 em PySide6 - commit 013ae2f
+------------------------------------------------
+
+A interface foi migrada para PySide6 e ganhou a identidade Fluxora. Foram
+criados o tema preto/verde neon, a barra lateral, as telas principais, a logo,
+o icone e a integracao com o motor existente.
+
+Motivo: a base antiga em Tkinter limitava o refinamento visual, a organizacao
+de telas complexas e alguns comportamentos assincronos.
+
+
+5.3 Preservacao do MP3 - commit c5c986d
+----------------------------------------
+
+Depois de analisar uma URL, a interface podia voltar ao formato MP4 mesmo que o
+usuario tivesse escolhido audio. A escolha passou a ser preservada.
+
+Motivo: a analise deve informar dados, mas nao pode apagar silenciosamente a
+decisao do usuario.
+
+
+5.4 Fila e historico - commit 7a70e3d
+--------------------------------------
+
+Foi criada uma fila de downloads, cartoes de status e um historico da sessao.
+Playlists passaram a gerar uma tarefa por faixa. A versao atual executa uma
+tarefa por vez e mantem todas as outras aguardando na mesma fila.
+
+Motivo: abrir varios motores yt-dlp, leitores de cookies e processos FFmpeg ao
+mesmo tempo causou instabilidade nativa no Python 3.14.3. A fila sequencial e o
+runtime Python 3.13 foram escolhidos para favorecer estabilidade, inclusive com
+duas playlists diferentes.
+
+O historico visual da sessao permite consultar o que concluiu, falhou ou foi
+cancelado enquanto o programa esta aberto. Ao fechar totalmente, esses cartoes
+temporarios sao reiniciados. Arquivos concluidos continuam registrados na
+Biblioteca persistente.
+
+
+5.5 Miniaturas - commit 924ae0d
+--------------------------------
+
+As miniaturas reais de videos e playlists foram integradas. Em listas grandes,
+elas sao carregadas somente quando os itens ficam visiveis.
+
+Motivo: baixar milhares de imagens antes de mostrar uma playlist deixaria a
+tela muito lenta, consumiria memoria e faria muitas requisicoes. O carregamento
+preguicoso, ou "lazy loading", busca apenas o necessario naquele momento.
+
+
+5.6 Conversor profissional - commit 0f15b2e
+------------------------------------------------
+
+Foi criado o conversor local baseado em FFmpeg, com arquivos e pastas, varios
+formatos, perfis de qualidade, progresso real, cancelamento e integracao com a
+Biblioteca.
+
+Motivo: o Fluxora passou de um baixador para uma central de midia. A conversao
+local tambem e independente de cookies e de sites externos.
+
+
+5.7 Selecao profissional de playlists - commit ab7649a
+-------------------------------------------------------
+
+As caixas de marcacao receberam maior contraste e comportamento semelhante ao
+Explorador de Arquivos do Windows:
+
+- clique marca um item;
+- Shift + clique marca um intervalo;
+- Ctrl + clique monta uma selecao nao consecutiva;
+- Ctrl + A seleciona as linhas visiveis;
+- Espaco aplica a marcacao ao grupo visualmente selecionado;
+- a busca preserva as marcacoes existentes.
+
+Como a tabela usa QTableWidgetItem e nao caixas QCheckBox separadas, apenas
+alterar o QSS nao seria suficiente. Foi usado desenho personalizado por
+delegate para manter o indicador visivel e centralizado.
+
+Motivo: playlists com centenas de itens precisam de selecao rapida e previsivel.
+
+
+5.8 Uma notificacao por fila - commit 4442327
+------------------------------------------------
+
+Antes, cada musica concluida podia emitir um aviso sonoro. Agora a notificacao
+e apresentada quando toda a fila atual termina.
+
+Motivo: uma playlist grande nao deve apitar dezenas de vezes nem interromper o
+usuario a cada faixa.
+
+
+5.9 Redesign do Conversor - commits a6dcd7c e f661f93
+------------------------------------------------------
+
+O Conversor ganhou primeiro uma interface profissional completa e depois uma
+versao Clean Premium mais compacta e adaptavel.
+
+Foram melhorados:
+
+- hierarquia visual;
+- lista de arquivos;
+- selecao em lote;
+- formato e qualidade aplicados somente aos marcados;
+- destino individual;
+- conversao individual;
+- painel lateral responsivo;
+- botao principal que informa claramente o que sera convertido.
+
+Motivo: uma tela cheia de opcoes pode assustar. O redesign manteve o poder do
+motor, mas mostrou primeiro as decisoes mais importantes.
+
+
+5.10 Instalador independente - commit 78b7d7b / versao 3.2.0
+----------------------------------------------------------------
+
+O programa foi empacotado com PyInstaller e Inno Setup. Node e FFmpeg foram
+incluidos, os testes foram automatizados e a versao foi publicada no GitHub.
+
+Motivo: enviar somente o codigo exigiria que cada usuario instalasse Python,
+bibliotecas, Node e FFmpeg. O instalador transforma tudo em uma experiencia
+normal de Windows.
+
+
+================================================================================
+6. O CAMINHO COMPLETO DE UM DOWNLOAD
+================================================================================
+
+1. O usuario cola uma URL.
+
+2. A interface valida se existe um texto com aparencia de endereco.
+
+3. O motor pede ao yt-dlp apenas os metadados iniciais. Essa analise acontece
+   em segundo plano para a janela nao congelar.
+
+4. O resultado indica se a URL e um video unico ou uma playlist.
+
+5. Se for video, a tela pode mostrar titulo, duracao, miniatura e opcoes reais.
+
+6. Se for playlist, o Fluxora abre a lista, preserva os indices originais e
+   permite escolher os itens. O limite padrao de analise e 100 e pode chegar a
+   500. Esse limite evita tentar carregar, de uma vez, listas com milhares de
+   entradas.
+
+7. Ao clicar para baixar, cada item escolhido vira uma tarefa da fila.
+
+8. O gerenciador inicia uma tarefa por vez. As demais permanecem na fila,
+   mesmo quando pertencem a playlists diferentes.
+
+9. O yt-dlp baixa os dados e envia informacoes de progresso, velocidade e tempo
+   restante ao Fluxora.
+
+10. Para MP4, podem ser baixadas uma faixa de video e outra de audio. O FFmpeg
+    junta as duas em um arquivo final com som.
+
+11. Para MP3, o FFmpeg extrai/converte o audio com a qualidade escolhida.
+
+12. O arquivo temporario e finalizado com nome seguro, sem substituir por
+    engano outro arquivo existente.
+
+13. O cartao muda para Concluido. O arquivo valido entra na Biblioteca.
+
+14. Quando nao ha mais nada ativo nem aguardando, o Fluxora apresenta uma unica
+    notificacao de fim da fila.
+
+
+================================================================================
+7. COOKIES, LOGIN E ERRO 403 EXPLICADOS
+================================================================================
+
+7.1 O que e um cookie?
+----------------------
+
+Um cookie e um pequeno dado que o navegador guarda para representar uma sessao,
+preferencias ou autenticacao. Ele pode provar ao site que o usuario ja fez login.
+
+O arquivo robots.txt NAO e um arquivo de cookies. robots.txt apenas informa a
+robos de busca quais areas de um site nao devem ser rastreadas.
+
+
+7.2 Por que aparece HTTP 403 Forbidden?
+---------------------------------------
+
+403 significa que o servidor recebeu a solicitacao, mas recusou a transferencia.
+Possiveis motivos:
+
+- cookies expirados ou invalidados;
+- sessao diferente da usada no navegador;
+- VPN, proxy ou IP mudou durante o processo;
+- desafio JavaScript nao resolvido;
+- muitas requisicoes em pouco tempo;
+- formato temporario deixou de ser autorizado;
+- mudanca no site externo.
+
+
+7.3 Por que cookies deixam de funcionar?
+----------------------------------------
+
+Nao existe um prazo fixo. O site pode rotacionar os dados de seguranca depois de
+um login, logout, mudanca de senha, atualizacao do navegador ou comportamento
+considerado incomum. Um cookies.txt pode durar horas, dias ou mais, mas tambem
+pode ser invalidado rapidamente.
+
+
+7.4 Por que o Fluxora nao coleta cookies escondido?
+---------------------------------------------------
+
+Navegadores protegem seus bancos de cookies com criptografia e bloqueios do
+sistema. Tentar extrair isso silenciosamente seria fragil, invasivo e poderia
+parecer comportamento malicioso.
+
+O Fluxora aceita uma fonte escolhida conscientemente pelo usuario:
+
+- cookies do navegador compativel; ou
+- caminho de um cookies.txt exportado pelo proprio usuario.
+
+O caminho selecionado fica armazenado para nao precisar escolher o arquivo em
+todo download. O usuario so precisa substitui-lo quando a sessao perder validade.
+
+Nunca publique cookies no GitHub, envie para terceiros ou inclua no instalador.
+Eles podem dar acesso a uma sessao pessoal.
+
+
+7.5 Chrome e Brave
+------------------
+
+Chrome e Brave usam a base Chromium, mas mantem perfis e pastas diferentes. O
+navegador escolhido no Fluxora deve corresponder ao navegador onde a sessao esta
+ativa ou ao navegador usado para exportar o arquivo.
+
+Uma extensao instalada normalmente pode nao aparecer na janela anonima porque
+o navegador desativa extensoes nesse modo por padrao. Isso e uma protecao do
+navegador, nao uma falha do Fluxora.
+
+
+================================================================================
+8. PLAYLISTS E DESEMPENHO
+================================================================================
+
+O Fluxora identifica automaticamente se a URL contem uma playlist. O usuario
+nao precisa marcar manualmente essa opcao.
+
+Uma URL de video pode tambem conter parametros de playlist. Por isso a analise
+precisa observar os dados retornados, nao apenas procurar uma palavra no texto.
+
+Para evitar o problema de tentar carregar quase tres mil itens:
+
+- existe um limite configuravel de analise;
+- o padrao e 100 itens;
+- o maximo previsto pela interface e 500 por analise;
+- as miniaturas sao carregadas quando ficam visiveis;
+- a pesquisa filtra a exibicao sem apagar marcacoes;
+- os indices originais do yt-dlp sao preservados.
+
+Preservar os indices e essencial. Se o item 50 for filtrado e aparecer como a
+primeira linha visivel, ele ainda precisa ser enviado ao motor como item 50, nao
+como item 1.
+
+O Fluxora tambem permite iniciar rapidamente pelo primeiro item quando essa for
+a intencao, sem obrigar o usuario a confirmar toda a lista desnecessariamente.
+
+
+================================================================================
+9. FILA, CARTOES, FILTROS E HISTORICO
+================================================================================
+
+Cada download aparece como um cartao com miniatura, titulo, formato, qualidade,
+progresso e estado.
+
+Estados principais:
+
+- Na fila: ainda nao iniciou.
+- Baixando: recebendo dados.
+- Convertendo/finalizando: FFmpeg esta juntando ou convertendo.
+- Concluido: arquivo final criado com sucesso.
+- Cancelado: o usuario interrompeu a tarefa.
+- Falhou: ocorreu um erro que precisa ser mostrado.
+
+Os filtros Todos, Baixando, Concluidos, Cancelados e Falhou nao criam copias dos
+downloads. Eles apenas escolhem quais cartoes ficam visiveis.
+
+O botao de remover em um cartao finalizado/cancelado remove o registro visual,
+nao apaga automaticamente o arquivo do disco.
+
+O historico da tela de Downloads dura apenas durante a sessao atual e reinicia
+quando o aplicativo e encerrado por completo. Essa foi uma escolha solicitada
+para manter a tela util sem gerar um arquivo historico.txt desnecessario.
+
+A Biblioteca e diferente: ela guarda os arquivos concluidos de forma persistente
+e volta a mostra-los quando o programa e aberto novamente.
+
+
+================================================================================
+10. MINIATURAS
+================================================================================
+
+As URLs de miniatura sao obtidas dos metadados do yt-dlp. A imagem e solicitada
+em segundo plano e adaptada ao espaco do cartao ou da linha.
+
+Se uma miniatura nao estiver disponivel, o Fluxora usa um desenho de reserva.
+Isso nao significa que o download esteja quebrado; significa apenas que a fonte
+nao forneceu uma imagem acessivel naquele momento.
+
+Em playlists, carregar miniaturas sob demanda foi essencial para nao travar a
+interface e nao desperdiçar internet com itens que o usuario talvez nem veja.
+
+
+================================================================================
+11. COMO O CONVERSOR FUNCIONA
+================================================================================
+
+11.1 Entrada
+------------
+
+O usuario pode adicionar arquivos, adicionar uma pasta inteira ou arrastar e
+soltar arquivos na tela.
+
+11.2 Leitura
+------------
+
+O Fluxora le formato, duracao, resolucao e outras informacoes. Quando FFprobe
+esta disponivel, ele e usado. Caso contrario, o proprio FFmpeg fornece dados.
+
+11.3 Configuracao
+-----------------
+
+E possivel escolher categoria de audio ou video, formato final, qualidade,
+resolucao, bitrate e pasta de destino. O formato global e aplicado somente aos
+itens marcados, para nao apagar configuracoes individuais sem querer.
+
+11.4 Seguranca dos arquivos
+---------------------------
+
+O original nao deve ser sobrescrito. O Fluxora cria uma saida com nome unico e
+usa arquivos temporarios controlados durante o trabalho. Espacos e acentos sao
+tratados sem montar comandos perigosos como uma unica frase de terminal.
+
+11.5 Fila sequencial
+--------------------
+
+O conversor processa um arquivo por vez. Conversao usa bastante processador,
+memoria e disco. Executar varias conversoes pesadas ao mesmo tempo poderia
+deixar o computador lento e, muitas vezes, nao terminaria mais cedo.
+
+Os downloads tambem sao processados um por vez na versao atual. Isso evita que
+varios motores yt-dlp, cookies e finalizacoes FFmpeg concorram dentro do mesmo
+processo Python.
+
+11.6 Progresso real
+-------------------
+
+O FFmpeg informa o tempo ja processado. Comparando esse valor com a duracao
+total, o Fluxora calcula a porcentagem e uma estimativa. Nao e uma animacao
+ficticia.
+
+11.7 Finalizacao
+----------------
+
+Ao concluir, a saida entra na Biblioteca. O usuario pode abrir o arquivo, abrir
+a pasta ou usar a midia em outra conversao.
+
+
+================================================================================
+12. IDENTIDADE VISUAL E EXPERIENCIA DE USO
+================================================================================
+
+O nome escolhido foi Fluxora. A identidade usa:
+
+- preto como base;
+- verde neon/limao como acento;
+- logo propria em forma de F;
+- icones com linguagem uniforme;
+- cartoes escuros com bordas discretas;
+- tipografia clara;
+- destaque forte somente na acao principal.
+
+A letra F duplicada na barra lateral foi removida porque a logo ja comunicava a
+marca. O icone tambem foi aplicado a janela, barra de tarefas, bandeja e
+instalador para evitar o icone generico do Python.
+
+O aplicativo normal inicia sem manter uma janela CMD visivel. A versao de debug
+continua disponivel porque mensagens do terminal ajudam a diagnosticar falhas.
+
+"Responsivo" neste contexto significa que areas e controles se reorganizam ou
+se ajustam quando a janela e redimensionada. Em um aplicativo desktop, isso e
+feito com layouts e politicas de tamanho do Qt, nao com medidas fixas para tudo.
+
+
+================================================================================
+13. DADOS LOCAIS, PRIVACIDADE E LOGS
+================================================================================
+
+Os dados gravaveis ficam em:
+
+%LOCALAPPDATA%\Fluxora
+
+Ali podem existir configuracoes, registros da Biblioteca e o arquivo tecnico:
+
+%LOCALAPPDATA%\Fluxora\fluxora.log
+
+O log registra informacoes uteis para investigar uma falha. Ele nao substitui
+uma mensagem amigavel na interface, mas oferece detalhes para manutencao.
+
+O arquivo cookies.txt nao deve ser copiado para o repositorio nem incorporado ao
+programa. O Fluxora guarda a escolha do usuario, mas cookies continuam sendo
+dados privados e temporarios.
+
+O antigo historico.txt deixou de ser gerado porque nao era necessario para a
+experiencia atual. A sessao usa memoria e a Biblioteca usa armazenamento
+estruturado.
+
+
+================================================================================
+14. TESTES: O QUE SAO E O QUE FOI VALIDADO
+================================================================================
+
+Um teste automatico executa uma pequena parte do programa e compara o resultado
+com o que era esperado. Se alguem alterar o codigo no futuro e quebrar uma
+funcao antiga, o teste ajuda a detectar isso antes da publicacao.
+
+O projeto chegou a 56 testes aprovados apos as correcoes da fila para duas
+playlists. Eles cobrem,
+entre outros pontos:
+
+- leitura e gravacao de configuracoes;
+- biblioteca e armazenamento;
+- analise de tarefas e playlists;
+- navegacao e estados da interface;
+- deteccao do FFmpeg;
+- leitura de metadados;
+- formatos e codecs;
+- nomes de saida seguros;
+- progresso;
+- conversao em lote;
+- cancelamento;
+- conversoes reais com midias sinteticas locais;
+- selecao de playlists e indices enviados ao motor.
+
+As midias de teste sao criadas localmente e nao dependem da internet. Isso torna
+o resultado repetivel.
+
+Um download real nao pode ser totalmente garantido por teste local, pois depende
+da rede, da fonte, da disponibilidade do conteudo e da sessao do usuario.
+
+Comando para rodar os testes:
+
+  .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+
+O final esperado deve mostrar todos como "ok" e uma linha semelhante a "OK".
+
+
+================================================================================
+15. COMO EXECUTAR O CODIGO PARA DESENVOLVER
+================================================================================
+
+Na primeira vez:
+
+1. Instale Python 3.13 de 64 bits.
+2. Instale Node.js para os desafios JavaScript durante o desenvolvimento.
+3. Abra a pasta do projeto no VS Code.
+4. Execute instalar.bat uma vez.
+
+O instalar.bat cria a pasta .venv. Um ambiente virtual e uma caixa separada
+para as bibliotecas deste projeto. Ele evita misturar versoes com outros
+programas Python do computador.
+
+Para abrir normalmente:
+
+  iniciar_fluxora.bat
+
+Para abrir vendo mensagens tecnicas:
+
+  iniciar_fluxora_debug.bat
+
+Pelo terminal:
+
+  .\.venv\Scripts\python.exe main.py
+
+Se o aplicativo nao abrir, use primeiro a versao de debug e consulte tambem:
+
+  %LOCALAPPDATA%\Fluxora\fluxora.log
+
+
+================================================================================
+16. COMO GERAR O INSTALADOR
+================================================================================
+
+Na maquina de desenvolvimento, sao necessarios:
+
+- Windows 10 ou 11 de 64 bits;
+- Python e dependencias do projeto;
+- Node.js;
+- Inno Setup 6;
+- dependencias de build em requirements-build.txt.
+
+Depois, abra PowerShell na pasta do projeto e execute:
+
+  .\build_installer.ps1
+
+De forma resumida, o script:
+
+1. verifica ferramentas necessarias;
+2. prepara os componentes incluidos;
+3. chama o PyInstaller usando Fluxora.spec;
+4. monta a pasta independente do aplicativo;
+5. chama o Inno Setup usando installer\Fluxora.iss;
+6. cria dist\installer\Fluxora-Setup-3.2.0.exe.
+
+O instalador atual foi validado no Windows de forma independente: instalacao
+silenciosa em pasta temporaria, abertura do aplicativo instalado e remocao pelo
+desinstalador.
+
+O pacote inclui Node.js 25.8.0 e FFmpeg 7.1 na versao documentada. O usuario
+final nao precisa instalar essas ferramentas.
+
+O instalador local validado tinha 92.666.565 bytes e SHA-256:
+
+2F114224AA54C0E4AFB8C2E22CC6EA9748177CFF791F784D187C3E25FD07756F
+
+ATENCAO: um instalador recompilado pelo GitHub pode ter tamanho e hash diferentes
+mesmo quando o codigo e equivalente. Nunca anuncie o hash acima para outro
+arquivo sem calcular novamente.
+
+
+================================================================================
+17. PUBLICACAO NO GITHUB E USO DA VERCEL
+================================================================================
+
+Release atual:
+
+https://github.com/pvoliveira2002/FLUXORA-MUSIC/releases/tag/v3.2.0
+
+Download direto atual:
+
+https://github.com/pvoliveira2002/FLUXORA-MUSIC/releases/download/v3.2.0/Fluxora-Setup-3.2.0.exe
+
+Uma forma organizada de publicar uma nova versao e:
+
+1. alterar o codigo;
+2. executar os testes;
+3. atualizar o numero de versao nos locais de empacotamento;
+4. criar um commit explicando a mudanca;
+5. enviar para o GitHub;
+6. criar uma tag, por exemplo v3.2.1;
+7. deixar o GitHub Actions testar e gerar a Release;
+8. baixar e testar o instalador publico antes de divulgar.
+
+A Vercel pode receber um site de apresentacao com imagens, explicacoes e um
+botao que leva ao link de download acima. Ela nao substitui o GitHub Release,
+o PyInstaller ou o Inno Setup.
+
+
+================================================================================
+18. AVISO DO WINDOWS SMARTSCREEN
+================================================================================
+
+O instalador ainda nao possui assinatura digital de editor. Por isso o Windows
+pode mostrar "Editor desconhecido" ou um aviso do SmartScreen.
+
+Isso nao significa automaticamente que existe virus. Significa que o Windows
+nao encontrou uma assinatura paga e reconhecida que prove a identidade do
+publicador.
+
+Para distribuicao profissional, o proximo passo seria adquirir um certificado
+de assinatura de codigo e assinar o executavel e o instalador. Tambem e correto
+manter o codigo, a Release e os hashes publicos para aumentar a transparencia.
+
+
+================================================================================
+19. PROBLEMAS COMUNS E COMO INVESTIGAR
+================================================================================
+
+Problema: "Requested format is not available"
+------------------------------------------------
+Significa que a fonte nao ofereceu a combinacao solicitada ou que o yt-dlp nao
+conseguiu enxergar os formatos. Atualize yt-dlp, verifique Node/EJS e teste sem
+cookies antigos.
+
+Problema: "HTTP Error 403: Forbidden"
+--------------------------------------
+Revise cookies, navegador correspondente, VPN/proxy, sessao e Node/EJS. Abra a
+midia autorizada no mesmo navegador e rede antes de testar novamente. Evite
+repetir centenas de tentativas em pouco tempo.
+
+Problema: "cookies are no longer valid"
+----------------------------------------
+O site invalidou a sessao. Exporte um novo cookies.txt ou renove a sessao no
+navegador escolhido. Apague a referencia ao arquivo antigo se nao quiser usar
+cookies.
+
+Problema: "ffprobe and ffmpeg not found"
+-----------------------------------------
+Na versao de desenvolvimento, confirme imageio-ffmpeg e a instalacao do ambiente.
+No instalador, confirme que a pasta interna nao foi removida pelo antivirus e
+reinstale a versao completa.
+
+Problema: MP4 sem audio
+-----------------------
+Use a opcao atual de MP4, que seleciona video + audio e faz a mesclagem. Se a
+finalizacao falhar, consulte o log do FFmpeg. Um arquivo interrompido antes da
+etapa final pode conter somente uma faixa.
+
+Problema: MP3 aparece como MP4 durante o processo
+-------------------------------------------------
+Durante o download, a fonte temporaria pode usar outro recipiente. O importante
+e o estado "Convertendo/finalizando": o FFmpeg cria o MP3 ao final. A interface
+atual preserva a escolha MP3 para nao confundir o usuario.
+
+Problema: miniatura nao aparece
+-------------------------------
+A URL da imagem pode ter expirado, estar bloqueada ou nao ter sido fornecida.
+Isso nao impede necessariamente o arquivo de ser baixado.
+
+Problema: aplicativo nao abre
+-----------------------------
+Execute iniciar_fluxora_debug.bat no ambiente de desenvolvimento ou consulte
+%LOCALAPPDATA%\Fluxora\fluxora.log na versao instalada.
+
+Problema: playlist demora
+-------------------------
+Reduza o limite de analise. Carregar 100 itens e muito mais leve do que 3.000.
+Use a busca e o carregamento sob demanda das miniaturas.
+
+
+================================================================================
+20. LIMITACOES ATUAIS
+================================================================================
+
+- Os downloads sao executados um por vez; os demais permanecem na fila.
+- Conversoes locais sao sequenciais por estabilidade.
+- Pausar e retomar downloads ainda nao foi implementado.
+- Gravador de tela, gravador de audio e captura de dispositivo aparecem como
+  recursos indisponiveis/em desenvolvimento; nao sao botoes falsos.
+- Arquivos antigos existentes em uma pasta podem nao entrar automaticamente na
+  Biblioteca. A Biblioteca registra os arquivos concluidos pelo Fluxora atual.
+- A interface pode variar alguns pixels conforme fonte, DPI e escala do Windows.
+- Mudancas de sites externos podem exigir atualizacao do yt-dlp ou do motor.
+- Cookies pertencem ao usuario, expiram e nao podem ser distribuidos no app.
+- O instalador nao possui assinatura digital de editor neste momento.
+
+
+================================================================================
+21. PROXIMOS PASSOS RECOMENDADOS
+================================================================================
+
+1. Adquirir assinatura digital de codigo antes de uma distribuicao comercial
+   ampla.
+2. Criar uma pagina oficial simples, possivelmente na Vercel, apontando para a
+   Release verificada do GitHub.
+3. Adicionar um atualizador seguro para o proprio aplicativo e para o yt-dlp.
+4. Melhorar mensagens de diagnostico sem expor dados privados.
+5. Criar importacao opcional de uma pasta para a Biblioteca.
+6. Implementar pausar/retomar somente se o motor puder garantir comportamento
+   correto para cada fonte.
+7. Continuar ampliando testes antes de alterar a concorrencia.
+8. Testar cada versao em uma maquina virtual limpa do Windows.
+9. Manter cookies, chaves e dados pessoais fora do GitHub.
+10. Confirmar licencas dos componentes antes de comercializar.
+
+
+================================================================================
+22. GLOSSARIO PARA INICIANTES
+================================================================================
+
+API
+Uma forma padronizada de um programa conversar com outro.
+
+Bitrate
+Quantidade aproximada de dados por segundo no audio ou video. Em geral, valores
+maiores oferecem mais qualidade e geram arquivos maiores.
+
+Biblioteca
+Tela persistente com arquivos concluidos conhecidos pelo Fluxora.
+
+Bug
+Um comportamento incorreto ou inesperado no programa.
+
+Codec
+Metodo usado para comprimir e descomprimir audio ou video.
+
+Commit
+Registro de um conjunto de alteracoes no Git.
+
+Container ou recipiente
+Formato que guarda faixas, como MP4, MKV ou M4A. O recipiente e a "caixa"; o
+codec e a forma como o conteudo dentro dela foi comprimido.
+
+Dependencia
+Biblioteca ou programa externo de que o projeto precisa.
+
+DPI
+Escala visual relacionada a densidade da tela. O Windows pode usar 100%, 125%,
+150% ou outros valores.
+
+Engine ou motor
+Parte que executa a logica principal, separada da interface.
+
+FFmpeg
+Ferramenta que processa, une e converte audio e video.
+
+Fila
+Lista de tarefas aguardando sua vez.
+
+Git
+Sistema que guarda o historico do codigo.
+
+GitHub
+Servico que hospeda repositorios Git e arquivos de versao.
+
+Interface ou UI
+Tudo o que o usuario ve e utiliza na tela.
+
+Log
+Arquivo com mensagens tecnicas para diagnostico.
+
+Metadados
+Informacoes sobre um arquivo ou video, como titulo, duracao e resolucao.
+
+MP3
+Formato normalmente usado para audio comprimido.
+
+MP4
+Recipiente muito usado para video, podendo conter imagem, audio e legendas.
+
+Processo em segundo plano
+Trabalho demorado executado sem travar a janela principal.
+
+QSS
+Regras visuais dos componentes Qt.
+
+Repositorio
+Pasta de projeto controlada pelo Git, com seu historico.
+
+Runtime
+Conjunto necessario para executar uma tecnologia. O instalador inclui os
+runtimes de que o usuario final precisa.
+
+Sinal
+Mensagem enviada entre partes do Qt para informar um evento ou resultado.
+
+Tag
+Marcador de uma versao especifica no Git, como v3.2.0.
+
+Thread
+Linha de execucao separada usada para trabalho simultaneo.
+
+URL
+Endereco de um recurso na internet.
+
+yt-dlp
+Motor que analisa fontes compativeis e baixa as midias autorizadas.
+
+
+================================================================================
+23. RESUMO FINAL
+================================================================================
+
+O Fluxora evoluiu de uma ideia de baixador pessoal para um aplicativo Windows
+com:
+
+- identidade visual propria;
+- downloads MP4 com audio e MP3;
+- analise de videos e playlists;
+- selecao avancada e miniaturas;
+- fila controlada e notificacao ao final;
+- historico temporario e Biblioteca persistente;
+- conversor local profissional;
+- interface PySide6 responsiva;
+- testes automaticos;
+- logs e tratamento de erros;
+- instalador independente;
+- publicacao automatizada no GitHub.
+
+A principal ideia tecnica foi separar responsabilidades. A interface mostra e
+recebe escolhas; o motor baixa; o conversor processa; o armazenamento lembra;
+os testes protegem; e o instalador entrega tudo ao usuario.
+
+Ao fazer uma nova mudanca, siga esta ordem:
+
+1. Entenda qual modulo e responsavel pela funcao.
+2. Altere somente o necessario.
+3. Execute os testes.
+4. Teste visualmente a funcao afetada.
+5. Verifique o log em caso de erro.
+6. Registre a mudanca no Git.
+7. Gere e valide o instalador antes de publicar.
+
+Assim o projeto pode continuar crescendo sem perder o que ja funciona.
+
+================================================================================
+FIM DO MANUAL
+================================================================================

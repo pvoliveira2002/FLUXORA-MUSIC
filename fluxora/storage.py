@@ -20,6 +20,7 @@ class Storage:
             'converter_resolution': 'Original', 'converter_bitrate': '192 kbps',
             'converter_keep_aspect': True,
             'converter_batch': True, 'converter_apply_all': True,
+            'screen_recording_dir': str(Path.home() / 'Videos' / 'Fluxora' / 'Gravacoes'),
         }
         loaded = self._read(self.config_path, {})
         self.config = {**defaults, **loaded}

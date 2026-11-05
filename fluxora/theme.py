@@ -42,6 +42,9 @@ QPushButton:disabled {{ color: #6E8183; background: #111B1E; border-color: #202E
 QPushButton#Primary {{ background: {GREEN}; border-color: {GREEN}; color: #0B1607; font-weight: 800; }}
 QPushButton#Primary:hover {{ background: #BBFF61; border-color: #BBFF61; }}
 QPushButton#Primary:disabled {{ background: #39542D; border-color: #39542D; color: #81947B; }}
+QPushButton#Danger {{ background: #3A171A; border-color: #7A353A; color: #FFD9DA; font-weight: 750; }}
+QPushButton#Danger:hover {{ background: #572024; border-color: {RED}; }}
+QPushButton#Danger:disabled {{ background: #211719; border-color: #382629; color: #765C60; }}
 QPushButton#Nav {{ border: none; background: transparent; text-align: left; color: #A7B9BB; font-size: 13px; padding: 12px 12px; border-radius: 8px; }}
 QPushButton#Nav:hover {{ background: #17252A; color: white; }}
 QPushButton#Nav[active="true"] {{ background: #224B0C; color: #F5FFE9; border-left: 3px solid {GREEN}; font-weight: 700; }}
@@ -74,6 +77,9 @@ QLabel#MediaGlyph {{ background: #0D191C; color: #91FF00; border-radius: 8px; fo
 QLabel#DestinationPath {{ background: #0D191C; border: 1px solid #25383C; border-radius: 7px; padding: 7px 10px; color: #D9E4E5; }}
 QLabel#ConverterEmpty {{ color: #697C80; font-size: 13px; padding: 35px; }}
 QLabel#ConverterDropFeedback {{ background: #25451B; color: #F2F6F4; border: 1px dashed #91FF00; border-radius: 10px; padding: 9px; font-weight: 700; }}
+QFrame#RecorderHero {{ background: #0D191C; border: 1px solid #29433B; border-radius: 14px; }}
+QLabel#RecorderEmblem {{ color: {GREEN}; font-size: 24px; font-weight: 800; }}
+QLabel#RecorderTimer {{ color: {GREEN}; font-size: 36px; font-weight: 800; letter-spacing: 2px; }}
 QFrame#ConverterListPanel, QFrame#ConverterSettings, QFrame#ConverterFixedFooter {{ background: #132024; border: 1px solid #25383C; border-radius: 12px; }}
 QFrame#ConverterAdvanced {{ background: #0D191C; border: 1px solid #25383C; border-radius: 10px; }}
 QFrame#ConversionCard {{ background: #0D191C; border: 1px solid #1C3034; border-radius: 10px; }}

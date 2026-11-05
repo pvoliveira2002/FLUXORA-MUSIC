@@ -10,7 +10,7 @@ O Fluxora 2.1 usa **Tkinter**; esta versão 3.0 usa **PySide6**. **Não substitu
 
 1. Extraia todo o ZIP numa pasta, por exemplo `Documentos\Fluxora 3.0`.
 2. Abra essa pasta no **VS Code**: `Arquivo > Abrir Pasta`.
-3. Instale **Python 3.14** e **Node.js** (o Node.js melhora a compatibilidade do yt-dlp com fontes que usam desafios JS).
+3. Instale **Python 3.13 de 64 bits** e **Node.js** (o Node.js melhora a compatibilidade do yt-dlp com fontes que usam desafios JS). O instalador de desenvolvimento recria ambientes antigos feitos com Python 3.14, pois a versão 3.14.3 apresentou uma falha nativa no Windows durante filas longas.
 4. Execute `instalar.bat` **uma vez** — instala PySide6, yt-dlp e imageio-ffmpeg numa `.venv` própria.
 5. Execute `iniciar_fluxora.bat` ou selecione `.venv\Scripts\python.exe` como interpretador no VS Code e pressione **F5**. O inicializador normal abre o aplicativo sem manter uma janela de CMD.
 
@@ -53,24 +53,26 @@ A Vercel pode hospedar uma página que aponte para o instalador, mas o binário 
 - Qualidade de vídeo/áudio, pasta de destino, cookies do navegador ou arquivo cookies.txt.
 - Detecção e análise de URL de vídeo/playlist com yt-dlp.
 - Seleção de itens de playlists com miniaturas carregadas apenas quando ficam visíveis, limitada ao número configurado para analisar por página (padrão 100; máximo 500).
+- Troca segura entre playlists: ao colar uma nova URL, ações e resultados atrasados da análise anterior são invalidados para não repetir a lista antiga.
 - Progresso, velocidade, estimativa, cancelamento, miniaturas de mídia quando disponíveis.
-- Fila com até três músicas simultâneas; playlists criam uma tarefa individual por faixa.
+- Fila sequencial e estável; playlists criam uma tarefa individual por faixa e músicas de listas diferentes aguardam juntas sem abrir vários motores yt-dlp ao mesmo tempo.
 - Histórico da sessão com filtros para fila, downloads ativos, concluídos, cancelados e falhas, além de remoção manual dos cartões.
 - Biblioteca persistente e responsiva de arquivos finalizados, com pesquisa, filtros e abertura do arquivo ou da pasta.
 - Ícone da bandeja pelo Qt (quando disponível).
+- Instância única no Windows, evitando duas janelas/bandejas processando a mesma fila ao mesmo tempo.
 - Migração automática, no primeiro uso, do navegador e cookies.txt salvos pelo Fluxora 2.x.
 - Conversor local real com MP4, MKV, AVI, MOV, WEBM, MP3, WAV, FLAC, M4A e OGG, conforme os encoders presentes no FFmpeg.
 - Extração de áudio de vídeos, três perfis de qualidade, resolução original/1080p/720p/480p e bitrates de 128 a 320 kbps.
 - Arrastar e soltar, múltiplos arquivos, pasta inteira, fila sequencial, progresso real, estimativa, cancelamento e repetição após falha.
 - Conversor 3.2 Clean Premium com lista compacta, painel lateral responsivo, aplicação explícita de formato/qualidade apenas aos marcados, destinos individuais, conversão individual e botão principal inteligente.
-- Arquivos temporários seguros, nomes únicos sem sobrescrever originais, suporte a espaços/acentos e registro técnico em `%LOCALAPPDATA%\Fluxora\fluxora.log`.
+- Arquivos temporários seguros, nomes únicos sem sobrescrever originais, suporte a espaços/acentos e registros técnicos em `%LOCALAPPDATA%\Fluxora\fluxora.log` e `%LOCALAPPDATA%\Fluxora\fluxora-crash.log`.
 - Conversões concluídas entram na Biblioteca e podem ser abertas, localizadas ou convertidas novamente.
 
 ## Limites desta primeira migração
 
-- São executados no máximo três downloads simultâneos; os demais aguardam na fila.
+- É executado um download por vez; os demais aguardam na mesma fila. Essa escolha reduz uso de recursos e, junto ao runtime Python 3.13, evita a falha nativa observada no Python 3.14.3 durante playlists simultâneas.
 - **Pausar/retomar** downloads ainda não foi integrado; o botão está indisponível.
-- Gravador de tela/áudio e captura de dispositivo **não estão implementados**.
+- O **Gravador de tela** funciona no Windows, salva MP4 H.264, permite escolher tela, FPS, qualidade, cursor e pasta de destino. A captura de áudio ainda não está integrada; gravador de áudio e captura de dispositivo permanecem em desenvolvimento.
 - A biblioteca não importa o histórico visual temporário do Tkinter, pois ele não continha caminhos persistentes confiáveis.
 - Uma pasta pode conter vídeos antigos que não apareçam automaticamente na biblioteca; a biblioteca grava os arquivos identificados ao concluir um download feito nesta versão.
 - Alguns sites exigem autenticação e podem deixar de funcionar devido a alterações externas. Não há garantia de que todo link seja compatível.
